@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wordle Solver: best next guess for any Wordle</title>
+<meta name="description" content="Free Wordle solver. Type your guesses, color the tiles and get the best next guess. Supports hard mode and plans ahead so you don't run out of guesses.">
+<meta name="theme-color" content="#0e1014">
+<link rel="canonical" href="https://fwsoapy.github.io/wordle-solver/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Wordle Solver">
+<meta property="og:title" content="Wordle Solver: best next guess for any Wordle">
+<meta property="og:description" content="Type your guesses, color the tiles and get the best next guess. Works in hard mode too.">
+<meta property="og:url" content="https://fwsoapy.github.io/wordle-solver/">
+<meta property="og:image" content="https://fwsoapy.github.io/wordle-solver/og.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://fwsoapy.github.io/wordle-solver/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e1014;
+    --bg2:#14171d;
+    --panel:#161a21;
+    --panel-2:#1c212a;
+    --line:#262c36;
+    --gray:#3a3a3c;
+    --gray-bd:#54555a;
+    --yellow:#b59f3b;
+    --green:#538d4e;
+    --text:#eceef2;
+    --muted:#8b909a;
+    --muted-2:#666c76;
+    --accent:#5aa9f5;
+    --accent-soft:rgba(90,169,245,.16);
+    --danger:#e0533d;
+    --tile:clamp(44px,13.4vw,58px);
+    --radius:6px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Space Grotesk',system-ui,sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(1100px 620px at 78% -8%, rgba(90,169,245,.10), transparent 60%),
+      radial-gradient(900px 560px at 10% 4%, rgba(83,141,78,.10), transparent 58%),
+      linear-gradient(180deg,var(--bg) 0%, var(--bg2) 100%);
+    background-attachment:fixed;
+    min-height:100%;
+    display:flex;
+    justify-content:center;
+    padding:34px 16px 64px;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* faint dotted texture */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:radial-gradient(rgba(255,255,255,.025) 1px, transparent 1px);
+    background-size:22px 22px;
+    mask-image:linear-gradient(180deg,#000,transparent 75%);
+  }
+  .wrap{position:relative;z-index:1;width:100%;max-width:512px}
+
+  /* ---------- Header ---------- */
+  header{text-align:center;margin-bottom:26px}
+  .deco{display:flex;gap:7px;justify-content:center;margin-bottom:16px}
+  .deco .dt{
+    width:38px;height:38px;border-radius:5px;display:grid;place-items:center;
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:#fff;
+    box-shadow:0 6px 16px rgba(0,0,0,.35);animation:drop .55s cubic-bezier(.2,.8,.25,1) both;
+  }
+  .deco .dt:nth-child(1){animation-delay:.02s}
+  .deco .dt:nth-child(2){animation-delay:.09s}
+  .deco .dt:nth-child(3){animation-delay:.16s}
+  .deco .dt:nth-child(4){animation-delay:.23s}
+  .deco .dt:nth-child(5){animation-delay:.30s}
+  .dt.g{background:var(--green)} .dt.y{background:var(--yellow)} .dt.x{background:var(--gray)}
+  @keyframes drop{from{opacity:0;transform:translateY(-14px) rotate(-6deg)}to{opacity:1;transform:none}}
+  h1{
+    font-weight:700;font-size:clamp(30px,8vw,42px);letter-spacing:-.02em;line-height:1;
+    background:linear-gradient(180deg,#fff,#b9c0cb);-webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .sub{color:var(--muted);font-size:13.5px;margin-top:9px;font-weight:500}
+  .sub b{color:var(--accent);font-weight:600}
+
+  /* ---------- Instruction bar ---------- */
+  .legend{
+    display:flex;gap:10px;justify-content:center;flex-wrap:wrap;
+    margin:0 auto 20px;
+  }
+  .legend .item{
+    display:flex;align-items:center;gap:9px;background:var(--panel);
+    border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13px;color:#cdd2da;font-weight:500;
+  }
+  .legend .sw{width:16px;height:16px;border-radius:4px;flex:none}
+  .legend .sw.y{background:var(--yellow)} .legend .sw.g{background:var(--green)}
+  .legend b{color:#fff;font-weight:600}
+
+  /* ---------- Mode switch (Normal / Hard) ---------- */
+  .modebar{display:flex;align-items:center;justify-content:center;gap:11px;margin:2px 0 18px;flex-wrap:wrap}
+  .mode-label{font-size:13.5px;font-weight:600;color:var(--muted);letter-spacing:.02em;transition:color .18s ease;user-select:none}
+  .mode-label.active{color:var(--text)}
+  .mode-label.hard.active{color:#e7b24e}
+  .switch{
+    position:relative;width:50px;height:28px;border-radius:999px;flex:none;cursor:pointer;padding:0;
+    border:1px solid var(--line);background:var(--panel-2);
+    transition:background .2s ease, border-color .2s ease;
+  }
+  .switch .knob{
+    position:absolute;top:50%;left:3px;transform:translateY(-50%);
+    width:22px;height:22px;border-radius:50%;background:#cdd2da;
+    box-shadow:0 2px 5px rgba(0,0,0,.45);
+    transition:left .2s cubic-bezier(.4,1.25,.5,1), background .2s ease;
+  }
+  .switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .switch.on{background:linear-gradient(180deg,#e7b24e,#cf9233);border-color:#cf9233}
+  .switch.on .knob{left:25px;background:#34270d}
+  .mode-help{flex-basis:100%;text-align:center;color:var(--muted-2);font-size:11.5px;line-height:1.4;margin-top:1px}
+
+  /* ---------- Grid ---------- */
+  .board{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+  .row{display:flex;align-items:center;justify-content:center;gap:8px}
+  .rownum{
+    width:26px;flex:none;text-align:center;font-family:'Space Mono',monospace;font-size:13px;color:var(--muted-2);
+  }
+  .tiles{display:flex;gap:7px}
+  .tile{
+    position:relative;width:var(--tile);height:var(--tile);border-radius:var(--radius);
+    border:2px solid var(--line);background:transparent;color:#fff;cursor:pointer;
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:calc(var(--tile)*.46);
+    text-transform:uppercase;display:grid;place-items:center;user-select:none;
+    transition:background-color .18s ease, border-color .18s ease, box-shadow .15s ease, transform .08s ease;
+  }
+  .tile:active{transform:scale(.94)}
+  .tile.filled{background:var(--gray);border-color:var(--gray)}
+  .tile.yellow{background:var(--yellow);border-color:var(--yellow)}
+  .tile.green{background:var(--green);border-color:var(--green)}
+  .tile.active{
+    border-color:var(--accent);
+    box-shadow:0 0 0 2px var(--accent), 0 0 18px 1px rgba(90,169,245,.45);
+    z-index:2;
+  }
+  .clrrow{
+    flex:none;width:26px;height:26px;border-radius:7px;
+    border:1px solid var(--line);background:var(--panel);color:var(--muted);
+    cursor:pointer;display:grid;place-items:center;font-size:14px;line-height:1;
+    transition:all .15s ease;
+  }
+  .clrrow:hover{color:#fff;border-color:var(--danger);background:rgba(224,83,61,.12)}
+
+  .hint{text-align:center;color:var(--muted-2);font-size:12px;margin:10px 0 18px}
+  kbd{font-family:'Space Mono',monospace;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:4px;padding:1px 5px;font-size:11px;color:#c2c7cf}
+
+  /* ---------- Buttons ---------- */
+  .actions{display:flex;gap:10px}
+  .btn{
+    flex:1;border:none;border-radius:11px;padding:15px 16px;cursor:pointer;
+    font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;letter-spacing:.01em;
+    transition:transform .08s ease, filter .15s ease, background .15s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{
+    flex:2.1;color:#072142;
+    background:linear-gradient(180deg,#8ec5ff,#5a9cf2);
+    box-shadow:0 8px 22px rgba(90,169,245,.28);
+  }
+  .btn.primary:hover{filter:brightness(1.06)}
+  .btn.ghost{background:var(--panel);color:#d7dbe2;border:1px solid var(--line)}
+  .btn.ghost:hover{background:var(--panel-2);color:#fff}
+
+  /* ---------- Result ---------- */
+  #result{margin-top:22px}
+  .card{
+    border:1px solid var(--line);border-radius:16px;padding:22px 20px;
+    background:linear-gradient(180deg,var(--panel) 0%, #12151b 100%);
+    box-shadow:0 18px 40px rgba(0,0,0,.35);
+    animation:rise .35s cubic-bezier(.2,.8,.25,1) both;
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .card.err{border-color:rgba(224,83,61,.5);background:linear-gradient(180deg,rgba(224,83,61,.12),#15151a)}
+  .verdict{font-size:15.5px;font-weight:600;color:#dfe3ea;text-align:center;line-height:1.45}
+  .verdict .word{color:var(--accent);font-family:'Space Mono',monospace;font-weight:700;letter-spacing:.04em}
+  .err .verdict{color:#f3a99c}
+  .err .ttl{color:var(--danger);font-weight:700;font-size:16px;margin-bottom:6px}
+
+  .answer-tiles{display:flex;gap:8px;justify-content:center;margin:18px 0 6px}
+  .atile{
+    width:clamp(46px,14vw,58px);height:clamp(46px,14vw,58px);border-radius:8px;
+    background:var(--green);display:grid;place-items:center;color:#fff;
+    font-family:'Space Mono',monospace;font-weight:700;font-size:clamp(24px,7vw,30px);text-transform:uppercase;
+    box-shadow:0 6px 16px rgba(0,0,0,.32);animation:pop .4s cubic-bezier(.2,.8,.25,1) both;
+  }
+  .answer-tiles.fifty .atile{background:#3f7fb0}
+  .answer-tiles.probe .atile{background:#4a5568}
+  .atile:nth-child(2){animation-delay:.05s}.atile:nth-child(3){animation-delay:.10s}
+  .atile:nth-child(4){animation-delay:.15s}.atile:nth-child(5){animation-delay:.20s}
+  @keyframes pop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
+
+  .count{
+    text-align:center;color:var(--muted);font-size:13px;margin-top:12px;font-weight:500;
+  }
+  .count b{color:#fff;font-family:'Space Mono',monospace;font-weight:700}
+
+  .others{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+  .others h3{
+    font-size:11px;text-transform:uppercase;letter-spacing:.13em;color:var(--muted-2);
+    font-weight:600;margin-bottom:11px;text-align:center;
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+  .chip{
+    font-family:'Space Mono',monospace;font-size:13px;letter-spacing:.05em;text-transform:uppercase;
+    color:#c8cdd5;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:7px;padding:5px 9px;
+  }
+  .chip.more{color:var(--accent);background:transparent;border-style:dashed;border-color:rgba(90,169,245,.4)}
+
+  /* clickable best-word + "use this guess" */
+  .answer-tiles{cursor:pointer}
+  .answer-tiles:hover .atile{filter:brightness(1.08)}
+  .use-wrap{display:flex;justify-content:center;margin-top:14px}
+  .use-btn{
+    font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13.5px;letter-spacing:.01em;
+    color:var(--accent);background:var(--accent-soft);
+    border:1px solid rgba(90,169,245,.45);border-radius:999px;
+    padding:9px 18px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;
+    transition:transform .08s ease, background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .use-btn:hover{background:rgba(90,169,245,.26);color:#d4e6ff;border-color:var(--accent)}
+  .use-btn:active{transform:translateY(1px)}
+  .use-btn .ar{font-family:'Space Mono',monospace;font-size:12px;opacity:.85}
+  .starter .verdict{color:#cfe4ff}
+  .probe-note{text-align:center;color:var(--muted-2);font-size:12px;line-height:1.45;margin-top:10px}
+  .hidden{display:none}
+
+  /* ---------- On-screen keyboard ---------- */
+  .kb{display:flex;flex-direction:column;gap:7px;margin:14px 0 18px;user-select:none}
+  .kb-row{display:flex;gap:6px;justify-content:center}
+  .key{
+    flex:1;max-width:44px;min-width:0;height:52px;border-radius:6px;border:none;cursor:pointer;
+    background:#565961;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;
+    text-transform:uppercase;display:grid;place-items:center;touch-action:manipulation;
+    transition:background-color .15s ease, transform .08s ease;
+  }
+  .key:active{transform:scale(.95)}
+  .key:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .key.wide{max-width:68px;flex:1.5;font-size:12px;letter-spacing:.02em}
+  .key.wide svg{width:22px;height:22px}
+  .key.k-gray{background:#2c2e33;color:#9a9ea6}
+  .key.k-yellow{background:var(--yellow)}
+  .key.k-green{background:var(--green)}
+  .kb-spacer{flex:.5;max-width:22px}
+
+  .btn[disabled]{cursor:progress;filter:saturate(.6) brightness(.9)}
+  .spin{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border-radius:50%;
+    border:2px solid rgba(7,33,66,.3);border-top-color:#072142;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  footer{margin-top:34px;text-align:center;color:var(--muted-2);font-size:12.5px;line-height:1.7}
+  footer a{color:var(--muted);text-decoration:none;border-bottom:1px solid var(--line)}
+  footer a:hover{color:#fff;border-color:var(--muted)}
+  footer details{margin:0 auto 12px;max-width:440px;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+  footer summary{cursor:pointer;color:#cdd2da;font-weight:600;font-size:13px}
+  footer details p{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.55}
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="deco" aria-hidden="true">
+        <span class="dt g">S</span><span class="dt x">O</span><span class="dt y">L</span><span class="dt x">V</span><span class="dt g">E</span>
+      </div>
+      <h1>Wordle Solver</h1>
+      <p class="sub">Type your guesses, color the tiles, hit <b>Calculate</b>.</p>
+    </header>
+
+    <div class="legend">
+      <div class="item"><span class="sw y"></span><span><b>1 click</b> = yellow</span></div>
+      <div class="item"><span class="sw g"></span><span><b>2 clicks</b> = green</span></div>
+    </div>
+
+    <div class="modebar">
+      <span class="mode-label" id="lblNormal">Normal</span>
+      <button type="button" class="switch" id="modeSwitch" role="switch" aria-checked="false" aria-label="Toggle hard mode">
+        <span class="knob"></span>
+      </button>
+      <span class="mode-label hard" id="lblHard">Hard</span>
+      <span class="mode-help" id="modeHelp"></span>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="kb" id="kb" aria-label="Keyboard"></div>
+
+    <div class="actions">
+      <button class="btn primary" id="calc">Calculate Best Guess</button>
+      <button class="btn ghost" id="clearAll">Clear</button>
+    </div>
+
+    <div id="result" aria-live="polite"></div>
+
+    <footer>
+      <details>
+        <summary>How it works</summary>
+        <p>It keeps every word from the 14,855 that Wordle accepts that still fits your colors. Then it tries guesses and picks the one that splits the leftover words into the most even groups, so the next set of colors tells you the most.</p>
+        <p>It also looks ahead. If a guess can still win in the guesses you have left no matter what the answer is, it picks that one. Hard mode follows the real hard mode rules.</p>
+      </details>
+      Made by <a href="https://github.com/fwsoapy">fwsoapy</a> · <a href="https://github.com/fwsoapy/wordle-solver">Source code</a>
+    </footer>
+  </div>
+
+<script>
+/* =======================================================================
+   WORD LIST  (all 14,855 NYT-accepted words: common first, then the rest A-Z)
+   ======================================================================= */
+const WORDS = "about their there which would other after first think could these where right years being going still never those world great while every state three since under thing house place again found might money night until doing group women start times today point music power water based small white later order party thank using black makes whole maybe story games least means early local video young court given level often death hours south known large wrong along needs class close comes looks cause happy human woman leave north watch light short taken third among check heart asked child major media phone gonna quite works final front ready bring heard march study clear month words board field seems wants fight force issue price shows space total above share sense weeks break event sorry takes girls guess learn added alone hands movie press tried worth areas books sound value lives round stand stuff drive green match model trust range trade chief james lower style blood china stage terms title enjoy cover legal seven staff super union began built crazy daily knows paper parts voice whose earth rules below offer sleep table truth build cases india piece visit wanna wrote gives river shall speak write album eight funny peace sales spent store track ahead allow brown moved plans radio cross focus loved miles speed jesus extra quick agree clean photo scene spend teams coach costs heavy train claim goals gotta hotel judge lines named brain floor image meant reach civil dance stock trump worst beach ended older calls color dream grand names sweet touch doubt drink feels shown basic carry crime fully japan plant smith texas worse award block lived peter rates avoid catch coast trial truly queen stars broke glass prior royal serve types begin ideas notes plays songs twice worry brand count fresh mouth owner scale score smart throw views click faith louis metal paris agent apply basis enter prime waste weird adult grade stone users apart aware fifth items proud tells birth drugs labor lucky prove tough units alive apple cards dress horse liked magic owned stick turns cells frank guide raise treat yours youth funds helps henry sites exist forms guard jones likes shoot sides solid sport steps taste facts harry hello links plane shape upper cheap joint signs steel tired crowd enemy fixed limit ocean proof banks chair homes honor noted trees email stuck sugar drama entry grant grown heads keeps lying route saved shoes smoke squad teach tests abuse angry laugh loves lunch storm actor chain equal leads posts quiet split taxes urban fault films mixed phase smile truck votes blame dying falls false fired novel shirt shots cream giant mayor minor pages theme usual voted walls draft drunk finds spoke talks upset birds cycle goods holds wales armed aside deals empty faces folks kinda moves prize rural spain tools admit favor frame guest teeth bunch fruit index shift stood tight crown grace rooms chose crash depth dirty error noise panel plate roads shame ships bible cable dates doors print sight broad drawn motor seats solar tries bills blind brief chest debut paint pilot steam clubs exact kinds loans quote swear trend yards bread greek inner reply roman tower wheel faced filed marks pride rough smell topic lewis pants sharp trick audio chart mount occur tears argue awful bound cloud files hills loose moral shock thick threw angel bonus flash gross minds refer trail uncle woods badly chase ideal jimmy kelly roles wings clock label naked opens pitch pizza plain anger comic ghost newly skill solve trash vegas virus boost crack dutch foods hired kings knife saint steal trans buddy cares delay elite forth hopes layer marry nurse rugby sheet stops bench idiot medal roger shell silly towns angle firms forum gifts grass hence lists races rapid rocks sixth valid vital bands creek fraud honey lands ratio scary spell sword waves begun cents daddy drove glory juice logic meets strip dozen fancy holes input knock ought risks bears blues boxes flood kills maria rally roots shops swing texts alert arena billy boots brave drops fleet jokes parks rings robin shake shore spots stats blast bones pound punch walks fewer grave mouse oscar piano slave craft devil gates hurts rated ruled sauce slide tiger alien beast candy cited dated fifty relax acted alarm globe hoped seeds spare bonds chaos corps opera quest sized tanks anime barry coins fails jerry lover panic scope stays aimed alpha boats brick danny gains mercy outer reads screw suits venue wages wells burns habit laura naval noble picks robot terry toxic wider wound asset baker brush essay hosts maker ranks rolls snake tasks trips ultra usage beats bobby canal climb fever fluid loads mills nasty perry twist unity winds blown chips fence males sorts souls stole swiss bored dealt flesh forty hated laser loyal patch radar villa adopt blade bucks camps cargo cried humor meals nerve sandy sheep trace bases chill codes craig grain grows knees lions liver metro mines rifle rival sadly sizes slept spray suite verse acres bless chuck couch crush fears fires genre lease shine tweet tyler inter react rocky shade teens tommy vocal yield bacon bombs burst costa hates salad sends stake swift twins welsh awake beans blank curve farms flows genes harsh hurry lakes mason nancy organ pearl sweat tours alike arrow cabin eagle eaten guilt haven seeks theft valve charm cruel delta ridge tends tribe zones canon cared loses pairs poems stamp voter witch array backs belly booth cliff derby draws fatal lemon polls ralph shark tales colin dairy diary drill edges flags flies jeans meter olive safer sells setup skull smash basin breed bride chick fairy freak grief lined lodge lords merit micro rebel tooth viral wears widow wives beard curse drain flame intel kicks ninth penny petty ports reign rises saves scare sunny cheat cheer chile demon elder fiber fried heels pulse realm rides shout alter brass crops graph pills shook stack aging audit blows clips dried jesse joins logan nails spite burnt buyer cease cloth eager elect lobby orbit ranch socks tires trunk badge buses carol ferry gauge paths peers rider ruins shelf width legit loser pulls roses sheer stark thumb urged wheat wrist acute civic clerk crude drone exams flour indie minus pause puppy slice spurs vinyl debts linux mates probe remix sneak spark steep straw weigh adapt cohen cyber dense kitty moses whale amber ankle armor berry bulls clash grasp handy lanes lungs manga poker sally scout steak sweep tumor cheek curry drake modes polar skirt spike toast waist wreck blend blogs brake cough depot drank dudes feast frost pipes purse tense vegan chess float grind grove hobby lance locks lynch nazis newer packs risky sided sober spice swept towel tubes arise ashes bloom clown cries dodge downs drums guild prone siege sixty sonic spine admin baked betty crane donor honda pasta randy tenth batch mitch paste plaza skies stare beers bells blunt champ ditch ducks lasts riley scrap shaft slope snack stern stiff sworn unite vault wagon bikes crews feeds hawks homer jenny lacks midst mommy onion raids rogue sings abbey baron bunny choir fools holly karma leaks masks poles shiny spoon teddy thief whats alley bully burke marsh messy molly ninja peaks pools riots roast salon tuned vague coral dough hardy irony jumps maple relay risen stunt wiped yahoo acids aired cakes flaws freed halls hints ivory kerry niche porch seals utter wires creep devon donna elbow exile goose grill johns pains poets rains ruler sperm spill swamp tasty urine calif decay diane flown imply mafia merry pumps reset shave slots stems vodka clues drift fuels grams hatch niece scent slate surge tapes token tunes woody yacht anglo dolls fries intro manor posed promo pupil sands shawn spoil venus altar atlas combo fatty flush hairy horns ounce seize spicy sting wines wired belle bites deeds poses rails raven rehab skins stall strap watts bliss daisy disco doses euros faint fines forge hears nodes notch omega queue trout worms bravo crawl digit flats flint hairs jelly lunar peach plots silva tesla beams cedar dunno heath lifts metre norms pinch queer rover scars syrup tones traps veins atoms bowls congo dwarf liner maths memes merge moron myths naive opted pedro rigid vivid aided belts boxer brook coats cured hedge icons joker laden limbs rainy salty scots serum skate stray tempo torch turbo arose blink chang chili excel faded gangs gases genus glove grabs greed greet lamps owing proxy renew retro rumor stoke thigh troll warns aisle amino bleed brace choke goats monks motto onset pixel props prose razor steer ample bingo brock cubic ebook fills macro romeo shady slack slick stove tiles tract vista vogue adore corey creed crisp crust fined flora gamma grape hangs juicy moody prank spear spies stain tidal wrath beads blaze brent caves chalk flock hides hyper moist monte rabbi scoop scrub shale titan trait troop urges clone drown jewel obese piper scarf sushi tails timer tying waits wakes baths borne dusty fibre focal gears noisy snail tutor verge yeast diets erase manly oxide pence repay ropes rouge shove snaps turks basil booze chord cooks crest decor fetch fuzzy herbs hooks kirby loops nexus nicer optic panda slash stein bates baton camel chefs chunk cocoa comet dread dummy flank flare forex leone lever pedal query rests sewer smack sonny swell wards align attic await cache comfy condo flick funky groom hogan hydro knots lyric plead slams bolts debit denis gamer lotus mails malik paddy paved perks scans tally timed wedge alloy cites colts crank decks fares linen moose motel resin rusty slips stint weary wills agony benny binge bumps caste chant colon curly discs famed fetus mound muddy sammy tents weber abide avail booty fixes highs madam nanny piles poppy pratt raced sacks tease bluff casts coded doris flyer isles miner needy patty rents roofs swipe tango blitz cigar circa cloak dover dwell fiery gimme goofy hicks jolly mummy peggy purge rhino soils venom vines windy wraps blush claws docks earns erica frogs furry leafs mango oasis oddly overs paced pagan psalm rhyme savvy spree thugs vapor witty woven amend bloke blond bowel bulbs cater deity edged finch gypsy monty palms sedan slang vibes algae ariel bowie brits dolly dryer ethic flair haunt hazel hyped kylie slain specs stash viola waved yummy adobe brawl butts chevy clint exits logos quota salsa swore vomit weave cores dared denim erect fauna flirt flute matte mixes morse sails stool taxed tread truce typed tyres unfit weeds aloud boast brink cobra heirs inbox piers pleas sigma spins usher annex barge birch bland bribe canoe cider equip foley havoc humid litre milky mixer pivot suing taped arbor cisco cling fella icing idols jihad lapse login mimic mural nasal quasi sears shuts cameo deter diner envoy fungi gravy hires meats psych rinse scalp sheds spans squat thorn toned wharf wiser yates crate crave crows gloss graft grips guise leash mater plugs rodeo shire sinks swung taboo tides visas alias annoy grail kappa liars liter opium penal plank ponds privy siren smear snowy stalk stink swine bangs carts clamp clans forks hacks hoops inlet kudos mains mould niger noses quake racer recap shaky stout stump wally yells berth edits malls mania menus parry patio pines prism renal rites roach sloan sniff squid swarm taxis terra verbs yikes abbot aspen bleak bogus cages cubes dizzy enact fists folds haram hound mourn nests pouch sexes shack stale tacos tummy wager whack broom brute buffy curls eater foxes fritz froze hitch medic muted nylon ozone rotor wigan abbas agile aides barca carve crook darts diver fades fedex filth genie glued heats hubby jacks ledge levin melts mined momma natal pests piled salts starr torah torso abyss arson basal crabs demos elves ether fetal finer fused gorge latex modem motif necks paolo papal peril polly pores shear snoop tenor wipes zebra babes broth cocky cones desks disks evade fairs germs heist maxim misty pinky quits robes satin slows tonic twain vowed binds chops ditto gland jumbo kraft louie mecca moons sighs slime spawn ticks towed waltz biker butch chats crore dixie dunes haste judas moods otter racks relic reuse scams vicar welch woken apron avant carbs coils exert glare hefty leaps lends nerds reefs santo slump azure cadet cords craze dumps evils faked geese hunts lowry phony ramen rubin synth tammy bends boxed brows coupe cures ebony folly fumes hikes hymns itchy junta latch libel lofty maize picky prima regal shalt sheen sleek sling studs tombs adept bowed cafes doggy eerie farce fling flung fudge gemma glide norma plaid plush shiva smoky solos spade swans temps vowel buggy cutie darcy dodgy ethos heals hinge intra irons mamma manic melon rowan seams shred synod vents donut garth gloom heaps hydra kyrie limbo lousy overt pious reins scuba thine viper beige bubba bulky dives emery flops incur latte leafy ollie piggy shrug sonar stony taper tolls toxin wasps assam boils cello detox feral flips harms hasty husky laced lipid perch sorta sykes truss undue wacky aches assay fishy frail glaze jerks joked ramps rhine sinus stung waldo whine abort banjo beech comma dogma evoke geeks lacey leans lowly lucid petit polio saver snuck tweak angst bison bytes expel fitch frown godly groin helix homie hover knack lured macho missy nouns potty silky stair brood chemo colby dandy donny eased gowns kilos leach lefty maids quilt sauna scrum slade snare stomp suede tiers timid tweed uncut widen braid bulge cuffs drags fonts forte fours kayak kneel recon trays vigil waive aroma budge clout corny droid dukes fakes feats forts gated girly hoard horde lambs looms lotto nitro pesos poked proto shone sissy taker triad valor wight bathe dares giddy hanks kiddo melee merch nudge ovens payer pints pours serge tempt whiff aunts bling bouts chico flake goons herds ionic lawns lorry moths mover rowdy sassy takin tonne tramp wield brisk bundy cupid defer dries flaps flask fluff giver gnome hades haute jails lupus lymph palsy polka repel skier slabs slums swoop telly volts waged whoop amaze chute derry drier epoch farts fated femme foggy gator lumps magma nutty plume plump shrub soaps stead vests warms whips bagel bigot britt bumpy codex conte cowan facet fates firth floss frees genoa heres kinks locus moors playa posse saber samba slant soles spelt tacky tulip wares busts combs croft felon grate hilly leech madly nerdy nifty paces salle seine shawl slaps valet aunty baggy carte fable gabby infer lager laird nelly pears strut swirl theta thong zoned awoke axial carat chore coles crept cults curvy filly footy fouls gents grunt gusts halal hijab masse mucus pixie sever skips snuff stoic swaps taser actin avert avian barns bayou chime delve fluke growl hater lobes nosed nukes pasha potts sects soggy stoop abode clams dazed dowry golds grids hails harem hippo inept juror liang macon moans modal moira pluck puffy quail quirk rabid scorn vouch wafer amuse aptly autos brunt chaps creme ferns groan hives hoist laces massa molds murky patsy pinto rants reels slurs tarot twigs canes ducts fives fleas folio franc gully lilac mayan mules padre quill revel rower spire spout sully vases whisk alibi arias clasp crypt deems doves edict epoxy fiend forza hoods hurst jerky licks mower oiled peeps pesky prays riffs rouse sabha scant sheik skunk sloth soups spoof tonga trope tufts aloha booed butte foyer goers grime heron inert lumen piety pinot remit riggs savoy tonal totem acorn alamo aloft amman barre beset bleep comms duped fared gable haiku howdy inked lakhs marge munch popes puffs reddy slimy snout spank spied spits supra tunic waxed beets brine churn dolce fuses hells hunch loner mogul moles morph nicks nomad pubic revue rigor roper shank thyme toner unify upped aegis ascot brill caged coney deans diode ester gills hertz leaky mites quack raged rages semis zeros argus biggs bosom cools divas leapt quark rarer slugs stabs swede teeny trams anvil cabal cadre cramp decoy diced draco drool fixer foray friar fussy goody holed honed hutch jetty khaki koala merle mocks monde muses petal poise rupee smirk snipe stave swami trove winch amour banco bantu ceded crock erode kebab rondo scion sores ulcer vigor yanks axiom buffs chino emits fangs graze knobs longs mince mints moray nacho reeds sabre speck adorn barks cumin decal execs expat kanji lingo lohan meaty quart ruddy sahib scala snort swims tamed typos vices warts xerox apnea banda booms bower capes celeb coven dials domes duchy femur gulls gusto hippy jazzy kiosk pushy quell roost shard sieve spore swain tenet tiled vials aback aloof brews cajun convo dorms druid duvet eject forgo freer fryer gurus hoses largo larva livid lotte mares molar pawns primo rayon sable slush smelt stirs axles booby brees bushy calms caved clung coals dined fonda ginny hough jaffa memos mocha noose parse petri punks savor taint tarts tiara visor volta acton alder bales bossy clots colds crumb dames diddy dived ember emmys erupt evict gleam gummy idiom jaded odors plums pooch scour snows talon thump truer waite yearn bambi caddy chasm crass crewe kites odour piped prune taunt whirl adage brash chimp edema flack haves hiked liege llama navel payed perky sansa steed chewy cleft clump deuce doped embed geeky lures mushy ovary runny saith senna silos simba tacit tilly totes vixen waugh whims wreak amiss cuter dimes eases ethyl glows grads grits heady homme hotly layup libra lifes modus pecan pings pique shoal smite twine voila yarns aorta beret bogey boron bugle flier frisk gasps girth mated plumb pokes porta posey sages techs vying walla babel beryl brats carta chump clove comte cysts deere ensue epics gecko iliad lathe micky oaths outed reeve roars serra sixes sodas spilt sutra sybil tuner abram ayres brant gaunt heave infra knoll mulch nance pooja rerun sakes saucy servo soyuz suave tibia toads wilds xenon afoot amity artsy barra canny claps doggo dumas erick feuds gauze ghoul hales hamza helms hulls keyed masts mirza panes ponce putty radon runes sewed snell stuns swish whiny zaire banal boned camus curie duper flees frock madre manus maven nappy nears pasty pesto rafts riser skits slits spook stork swoon thane tithe bimbo bongo cairn campo coups crepe crocs duels earls emmet flaky gamut kiwis madge mavis nicht nymph paler prawn puree soars tipsy topaz waned ahold amigo anode argon atone briar burgh cacao caper carer ceres chock comer debug faves garda gooey halts leary lupin mufti nadir pimps proms raked razer salvo sodom sofas surat tapas aggie atoll cotta domed drips eaves enema greys gulag horst inset limes lunge slung surly trier veils verve bonny bores cline eared hakim hauls henna hinds laker lindy lough lumpy minas neath nines olden riled seton spool spurt teary tween wonky adieu bebop bilbo corgi dents dusky fermi gaudy gauss gazed grays grout heros minis mists musty raves roped seedy sleet spasm stubs swath tinge yolks burly celts chara covet dales dingy fizzy gourd grins jacky jello liber lurks manta mores peres pilar shunt stent summa thang wicks agate alkyl aster barbs canto cynic erred faker fjord flume foils gales gripe gruff imams lolly mired mumps ortho ozzie reeks salve scaly scold trois vexed voids wiper amped bezel craps crick dunks filet gonzo graff hyena knelt lazar lusty manna mille milos outro pease peels peeve pinks prong sawed sloop tongs trite tusks vitae whigs winks allot amine batty betta bitty blurb chirp clays clogs conch dimly duets golem hares honky jeeps leper levee lurch mamas mondo probs razed sarin scoot showy silks sills spate tabby tatar tilts aural blimp chews clary curbs dally elude ender glade gulch hiker howls irate lapis loony mambo moped nicol rowed scoff sepia tabor varna weeps amass auger buoys cardi chica credo jocks lapel maxed mowed omens pansy parti quads ronin rouen safes tawny trims anima awash boson brawn foams goths grimy islet laity midge parka posit puked snore stank wands wimpy cacti chaff comps corby crump dingo donne froth guile hallo homey irked lobos lovey natty pared pikes prowl quash redox rifts rishi shrew shush sited soapy spiky waver wring zorro agave beaks beefy berks boars boing drape fords innit lasso lemma orcas ouija polis redux scone steen tamer vichy zonal amiga bakes bally beaux beeps biome bough crony dicky dumbo emcee fugue glean gutsy hafiz lanky lurid pales reals stipe strep trill unmet agora askew bicep corso delft dorky ganja howes hunky outdo pygmy riven skids tetra verso vroom zooms casks chard cribs dewar elegy evens fiver folic golly gouge kilns loins mauve mitts omits pacer rakes ravel scape stade taffy tepid tripe wests wiles anion balmy bards bento bowes caked cuppa durst fatwa glyph gumbo inane leeks nitty saggy septa serfs sneer splat touts usurp adder algal allay bream chins coder degas ghazi leger lowes mazes minty moldy ochre orang plows rivet tardy twirl vardy wagga abate adios blocs busby dopey ducky easel grist inlay mandi paras poach raine sacra sappy shill shins slats speer squaw throb timon toyed bight bilge bonne codec conga daffy dicey enrol griff jumpy liens loath loopy mused obeys porky poser pylon refit roomy seeps spina terse wench brags casas clank cushy gaffe gavel glens glitz hoppy ladle mensa otaku phage pumas punts rhone shirk solon spiel swank tacks torts tubby tutti twill yawns agape altho anise baits caron cilia cinch colic devel dwelt frets gipsy glint halos lidar lopes lycra mamie oldie padma parra pelts rajah recur ricks sault shams sired sitka snags snark stews trawl waxes yucca abhor aight bared choco dawns dilly dings igloo jiffy lofts mamba mossy pasts quint raspy ripen serif spiny sturt swabs tangy tuber welds affix afoul bunks clang coped decaf dinky dobby foals glebe karat krill liven mages mitre naira oozes pager rance rumba saree skiff tucks uhuru wrest blurs clink doers dosed dregs expos fells gloat hokey karts lisle luger mammy mirth morel moria noyes oomph plebs prost quips ruble snarl taiga tulle wowed amply aways bevel blatt bodhi brava clack covey crimp debby foyle gazes gilly gizmo guano guava hoyle husks kondo magus mikes pacts pauls pithy sagas sayed senor swamy tomes toots washy wince biter bloat bolus bursa bylaw chums crone decry downy exalt frith halve hecht jaunt khans knits levis louse mezzo nawab pangs peeks plies rabat rears rebut saran scrip sheaf snobs tanto tater thunk tints wicca alway axons bests burka cleve cours dorks douse gusty knell locum logie mucho nooks ombre reiki snide sowed telco vamps vespa vesta aline baldy bidet blobs bodes burqa cased cates cocos corky dinar ditty droll fader feign harps hooch kooky leery lobed ovate prude reams scabs soaks staid vocab waded zooey bazar corks etude fleck fossa geist hocus hymen kandy knead lemur liken loons meath missa narco odeon peony poops quant rebar retry sleds smock stags staph thins torus wahoo artis bails bawdy beaut begum catty curia fides futon hasta henny holla humps laver meted miser mises myrrh nazir pappy plied poppa reedy rinks rooks roque saheb savin segue slurp tryst tubal twang whorl wordy arras bandy bendy bogan causa cower cubby dikes dimer flail garbo hammy janes jawed larch milks moxie neves nizam nodal nosey radii resto rivas rungs seder sicko spake stott toddy turds unzip vlogs writs altos anker batik evert gyrus hunks miler pokey sarge snafu spitz surah taupe testy trios twerk usury veers appel betel blume borer carle chomp cubed cuddy culpa divan dixit dozed fasts hosed infos liana manet muggy passe peppy pucks purer quays rebus rosin sangh shorn slays synch thorp tikka treks undid zaman antsy boozy bruin chine crags creak datum delos dinos doric exude feint furor karst lordy mongo pater prion profs roams sires skimp toons unwed wifey wilco wooed zippy bayes campy droop jager jakes lamas machi niqab offal pyrex sabra sambo scowl shied shura sooty terns untie wifes bares boney butyl chars dewan dotty droit dunce elope getup harpy hight knave lauds mange matey motte nanna paves preys rasta raved sakai sayer scrim taxon testa vapid akita annul bijou biota canna chaco coves cress damme egged flyby guppy kendo lusts neigh ogres oriel sabin sager sippy tippy ummah whelp whizz wooly yorks acker ameer ashen augur balsa beady betas blurt bongs borax cokes curds doozy drawl dupes gabba gandy grubs gundy kalam leggy lithe nyssa piney pulis sexed snook strum yucky zacks aedes boles cheep colas djinn emacs faxed joust ovals peaky penne preps pudgy ratty satyr spuds xenia zilch afire aggro albee ammon apace arles becks bogie buzzy combe coops copes emote gault glial gnats layed leben lifer linky manse melba morro saute shand skied slyly spars tills trine volte zetas allis ambit avast basta belie cajon calyx codon corns dayan faxes filer goner gongs hoots kiddy krabs lexis locos mutes nubia paged papas perce prise putts scuff sibyl sikes spats spews sucre voles wails zippo amide basso broil chowk claro dears didst duomo forme frack frere geyer gruel ident idyll joule kissy kneed larks limos loach mungo nonce pally selah syncs syrah tuple unlit warps wisps aught belay bloop curio endow fosse jokey krone leant livre lysis manes mooch musky pharm rager repos robed sated singe sprig sways tarry afore alums artic boggy conic crier dines dower festa ficus genet ghats glans glues imbue jinks junky kilts lomas mutts noobs ovoid pitta plait rioja seers shyly skint trike trots wispy ached argan begat burbs clift cutty dowdy ennui foamy hants hissy meuse pacey pacha paean rayed sitar smuts tatts varus wryly zesty botch chafe clued coley coots cowed croak frizz hamed ingle lefts mache mealy panto paseo purrs rayne ricin rimes saris slags taber trice whist woops woozy aleph aphid areal baste beget biddy binks blare cagey corse creel deets delph ducal echos ligne maxis minos miter nobly nuked piste polyp pried punto runic sedge smoot stile stunk ulnar umber umbra vagus wimps atria blips buxom dirge dowel dozer frist fundy gassy humus hurls ingot jammy jeune kraut motes nippy pouty shere slink snead talus tinny tonks umami wacko webby wikis acrid auras beefs bigly bindi burks clade cleat combi dells dross dweeb fibro fille fugly gayer gutta hanky humic lamia legge logon meows mylar pervy rummy sheva shuck sigil sooth stilt weedy zulus calla caped fanon flava hulks iliac impel kiley malts oases oiler quine sider soler spurn tarps weise wrung zilla brier burro cholo comas cooch dubbo goldy gorse helio kazoo ketch lossy monad phlox pupae rebbe scram sours thein tonka tress wilts ardor baloo batts canst copse galls grice gulps heald jebel kells kooks libri maron oozed opals punky rares reaps salix shute skein skool stele sumac telex venal wanes weems weepy yerba yodel antic bated brack chola cissy compo conus dryly gomer hobos imago loris macaw manas manos metis pekin prods roose sinew snubs stang sulky taras tilak tines voxel yoked zakat bardo barmy biles capex chana cluck dumpy egret fests fubar jeers jukes licht meads pinup ratan rinds scamp shuns sonne spams spica swill telos weirs aioli beano biked blain boric bromo carbo chace dongs doody fayre frill gilts hovel leman meany mimes molto mulls polos scree sorel zines abuzz amble beaty blots burry coked dobie extol gunny idler keels lanai layin lochs loess opine ostia paisa picot prana rater roshi rumen russe smote solas solus soppy stupa vanda vanes velar weald yogic abled agger basti benet bogle boult caulk coffs coram cored craic diwan fagin fetid frosh grump gyros hoary homos hoody jolts marly matin morne mucky payee peaty phono redid ronde scull sella squib tapir toney udder waken bitsy borel dusts finis fount gamba grift kafir karoo lense maire nixed paled pampa pecks scarp skews soled soupy tings toros wazir yogis youse abuts antis belch birks cento doled glace harts issei lulls marts minke peons petar ponty pubis sasse shoji swire swizz tanga teats tizzy twits welts wombs baler bocce bourg bunce burps chert claes deign doula elfin fazed galas hards hones lavas mercs negus spink taluk upend viner wagyu amici clave cronk dolor doyen eyrie fayed flout fumed gamed hyoid jeffs joist klang kohls lites massy moats moult murry nappa nervy paoli parle porgy radix repro saner snips ulama abaya aeons aurum balms boras bulla deism ditzy douma exons genii gowan grama hooky kisan lesbo liane loran octet paise perps perse ramis recto satay sayid slobs sneed aarti abies aliya asana atman attar bokeh byway casco choon clunk croup crunk dippy ebbed frond goeth gored hadji hansa honks ilium kerns liger lysol manis mesas mudra nobby pervs pudge pulpy ramin ritzy rives roker setae sutta taiko tench varia andro anent bluer burrs certs devas divvy feist homed hotch jiggy krona limps loamy melty minny mulla noddy penna podge pricy quire recce rubes strop surfs tsars wrens agers aglow aphis bluey brule chive chugs cyclo foots grebe gules haver huffy julep khadi kurta laika newts nomen plats ploys riles seely slims softy spall stoma swash thana torii towie welly wrack wurst xylem axing boons briny casus croon culls cusps dancy duals duddy feria feted fonds gaily hatha iftar lippy llano matzo piezo pored sadhu stour tanna techy tinea veena waker wushu annas benes biffy borgo capon fiefs fluor gally goofs hoofs jours junks kutch mafic mudge nihil oleic peart pisco pleat pukes raver selva sisal taels tatty tenon thaws tilde wades auxin boeuf caird caned chide cobbs cruse fawns fowls humph kranz melds mosey muffs mutch peavy petre sieur surer tanka vetch aerie aleck amrit antar bucko carex dirks doted duras fakir floes flunk genny hexes honan hussy lamer oxbow pares pilaf pongo qubit scald senza sokol sower tabla tansy vives blase blest bourn brims chaya chook deers dooms douce gauzy gluon hajji huffs kanga lande lovat malam milch mixup preen ranga revie swale swart toils antes beery blued bundt bunty chiao copra cotes dacha daman deeps eland hythe lairs liman nagas natch pails plonk pupal sango sebum shaul targa ulema zinke adobo alans baser basse camas chota cutch deary doner dural eying fatso foist gammy jibes lagan malic meson noirs owler rearm richt skink sloot steno toady troth wolfs barro basho brome bubby filmy fogle haugh holey kaput kefir kelty kudzu limey linga litho longa micra minks octal offed rands recut ruder spork toque weeny banes blart bleat boule bozos cakey civet deist divot dryad dulls finca gigas klutz lakin lento maser nares plage pulps routh shiel takis wazoo wheal yeahs bolas breve bused carob chavs delis doily dungy eider flory groat herby jirga jocko kyles plunk sefer siler silty stela torte tutus twerp vagal withe bacha balti baulk cella chode creds czars doles dopes furth gores gosse greve hider hocks juvie mangy mardy mends novas odder pinna prang rajas sates sepoy skims slosh smits spoor thiol wroth allee allyl aping aspic balks barbe cedes culex deffo diene easts ergot gamey hypes idled jonty jowls karas lames nisei nomos numbs prams ramus renin routs sines splay sunna umrah verry waked wonga asker axils brane brung caput comix coyly danks derma doest durum effed felts fetes folie gapes glute hanse hynde jambo loots makar malty marri mopey moyle perms quoth scuse shims stell sylva ticky twixt veiny warty yelps apres arcos arris auric befit bipod braai cubit cully delly drams goyim grosz harks hijra kents lores lubed maiko malar peats psyop punny rials sheol shola skene tames topos wafts yokes aimer azide bajan bothy breds darks dicta dowie fasti fuddy gages geode hames hazed horas lings louts lutea marah nidal paver pinta pouts quiff rusts sabot sophy stich sukuk tiddy tromp tunas vales amuck anata bitte brach choux dyers geste goold guyot hilts hullo jades kugel lieve longe loupe maggs morra novum obits pinko purty sixer sprue talky trant wined zloty almas apgar arish bairn bronc cavil dashi daunt dawah egger hance hoyas kluge lytic ocher phyla pined retch rueda saker sanga scapa shama shays shish slaty stoat torta warby bassi berms chiro cooed deads dotes faery galea gaped gnash heigh hokum lethe matts mauls mucin novae objet paedo perdu rangi rooty rowen salto sprit tache tepee trist villi wormy acing aland banns broch carpi dices dobro doeth fiers fovea kasha lucre matai pavan plops pocky reman rubus sopra supes swats thema vertu vires whare whish bandh biped braes coste debye deoxy dinna fitts flits huggy idles lutes maces malwa mousy nulla ology orval panko pieta prest ravin saiga salop saman slake tubed tykes unbox whirr wised wools yager bacca biggy chubs clods cloke coble copay damns dhoti emmer fends finks flied furze izzat lapin lassi muzzy nandu nkosi odium pakka peris sedum sidle situs teems terai therm titer voile whoso yurts agios basij botts brads bulks butty cobby fifer frits grana hayle henge huger hurly joeys kerbs kiang leese manto mauri mayas minim moire paire pawed romps shags skeen talaq tates teres thuds vireo agama bizzy cardy chads chela damar dater ewers fixit gesso gulfs jakey jingo mimed mirin pedes spode sprat sulks swags sylph tranq uvula wides zante bayle begot blore brede bwana carny carom drily filch finny golfs grrrl gurls laksa lammy lubes minar muons palpi palps poots quist sensi slunk snoke squab thrum totty waifs yeses zazen zowie borde calve cerci coeds cooly crake debar dilli ducat edify gazer gushy hazan heeds ileum kipps laith loral mazer mesic minge motet paned quins ribes rorty rubel sants shart shies shogi signa stylo thole verts voces wonks aking bilby brigs cabby canty cornu deman donee eidos folky frise gnaws karri leavy maxes musts neddy nieve piton riper safed smush tolly tondo visto aider argot brust clime eking faggy giron izard jemmy kauri licit linds lucks lyase maned melas merde narcs nevus oaken oboes remap satis scums serre shaws sizer snoot timbo toric vitas wolds areca avion axion beare bombe bunds carls cauda cooky doges emirs hiver jambs kimbo kraal krang kulak lares lunas lungi lyssa maras moder nikah ninny paten phial rucks sidhe sulfa sward tangs unary virtu whens xrays yogas zonda arete barby bassy bever bowne bunts dalle enews esses frags gyoza kalpa krewe newsy qibla raita ribas ropey sones souks spick stane stong treed vinca waddy wiggy wussy arced boyar caber caret charr edger frats gawky globs gloop goads halon hewer hilar holts hotty jamon korma maile nahal noway nutso ohmic outre psoas puddy pukka rangy slane solan taira teles tempi tenno thali tiler toffs uplay veldt whata yokel aloes ambos angas aroha comal cuvee dreck fleer galax garni gilet hewed hirer inure koine noles perea putti sabir sofar tares titre whelk bosun comus dabba davit dolts forel gimpy jawan klick malas manky molla murti qualm resit rices rodes skulk stull tokay wowee asper basks bekah campi ceiba crees doona dowse eales flues gaits gonad goopy gunge junco junto kabob mooks murex newel nixie ogled pardi pinon plebe ragga raker scads sorbo tiffs tuxes tyers warez wavey yukos arcus avers capos chows dully eldin ferny fiord halfa hause hexed jests marls moola nonis nulls parvo peals pipit plena repin seles selfs silex tangi tomos valse whomp yetis akela appro burin chits commo divis eosin folia grise ivies maced phang pyres quids ragas schwa shahs simps slops tenge teste toile toman tunny wends woosh yappy bergs bhaji boche brize capiz carps cheka chere culty doper dunny grund krait lycee marae munis naves okapi palla pries sifts spier spiff tarsi vakil bocca braze canso crams crims hadst haole haply kindy kirks kroon lardy logia nanas orris panga pardy pikey pitas plast prats rebuy ruses simul soman spang spirt thous togas tubas unban vampy vodou volks zingy aargh armer baize boite bract corms crape druse flite garis gists halfs klong likin linac liras miaow nates ngati nones owlet pandy payor plink raphe siver sware whang auris brith clews cowls crise deify doorn foxed graal hooey kanae kilim lathi lysed menta mento nashi neons pyros quaff repot seamy setts skoal taxol trews unset wader wangs wedel yabba ancho beton byres cecum chirk crits ditsy donga dores ergon flubs fulls hakam humpy jnana joram kloof monie moony morts nidus obeah ponts rasps rhyne saros segar selle sepal sexts terek terfs tikes vexes withy abaft cades caner delts dicer dodos dyads eikon exult filii gobby jinns kerma macer milia mings mires motus namma nisus ordos ousts presa ricer salic schmo skell snood tolan trave tuffs tynes urate varas acari afros alang ament apter baled beaky brays colly coned dojos dumbs emend frons gilas hoser imari kohen loper miche moobs parol prole pshaw renne rheum runts sabes scats senti veale warre yangs alack banya bided borna brose demur dishy eniac fitna flyte geoid helos hinky hoven leges mizen progs ranke ratha softs sunup syren targe titch volar abaca abele aesir alkyd amido benni beres bhang caver cocci cyano drome duces eejit forbs fraps gamay gimps gouty gyres kente kukri liker meres miked mucks naiad parly poley psion pyxis serai taube trank treen trona trull yamen beany bunco bunko copal crome drabs duroc frier furan gazoo gobbi infix jedis kemps misch musca musha ocker ovule pokie primi quale rathe redon samey scart soddy strad sulci toles toppy wuxia abeam aldea amies anana bants cooee elide flexo frass fuzes ginge goest griot halse kabab karns moots muley ninon oleum phare recco sabal sensa solum subha tanti tipis tokes toted urena vivas babka bruit canid celli deray facia holon hosta imine kames kempt loafs macks nebel patin pokal quina recta scaup sente soave soldi thuja ables beaus boral cundy darky diffs diyas esker fenny gular janny kanes kombu metes netty oculi panne papaw pooka rache sains secco seres shoyu silts souse tenny tragi uteri weans womyn ancon araba baddy bibbs cedis choli cocco cuppy frump grody gussy herry kapok keech kilty meers occam pigmy rimer roble rotas ruffs serry shyer snaky swigs talas toker treys trigo umbel vison zombi zygon baboo bents boink chuff cruet damps diazo doomy fiats fiche gaffs khaya laich lotos malva noons pekoe platy polys quare rumps snick sprog steem telia tichy zings achoo aldol batta benga booky buffa camos carby carrs carse dhows farad frays gamin hollo hudud hylas ichor inker lamed leers menes moggy molts neese okays piker pions plods pommy puggy scran scuds sessa sture suras taxus turfs addle agood babas barny belon bines bonks ceria coate coved cruft drupe duple etats fames fecit fores gofer jotun moten mulga nixes orals pappi pinas ponzu pross riyal rotis shako shiso sipes soldo spacy tarns thebe tiros vitex waxen whets adhan aquae balas cants colls datto elvan enoki gluey grans indri jives juked knowe kofta laxer lunes marle menge monos moong muhly nabob nacre nalla namer ovine parky plasm potch roosa stows tabes uveal vilde anyon axels bania bolos conne crans cuing dagga datos dhobi doxie dozes dynes eclat incus japes kibbe lodes looby molls muggs mumsy nopal ponga ritts simas siree sudsy swang turps yonks acnes arene beedi cains chibs chiru culms cutey drees facer fauns flays fogey fugal fusty gooks hains hilum jills jinni linum mavin micks mosso narre oxime plier poesy ramal redan redes regie sames saxes scrat utile velum viols witan beath bides blahs blowy bumbo buran cutis dibbs faine felty gompa herms jugal klett murid nubby pates podgy pombe quoad relit shewn shive tawas toran vivat xeric ailed aitch annal assai baccy bawls chary cirri cobia denes dolci duffs foody hakea icily ileal kulfi loden makis marka maund monas mynah panax pewee quoin ruing saids shaya skive stipa stirk stria swink talma thill verra aeros appal barer burse buteo clefs dinge duppy fifes germy gluts goyle kicky knish letch liard liers melik middy mohel nites rudie scena scopa strew subah tamal unfed virge abets bason bikie bosie bungy diols fakie gappy genic glady glees hoagy hurra iller jutes koans kvass lated loams ludic lurex mezze mopes myall ogive pavin plotz poled ramie raths rawer sechs serin shope snarf spean stumm suber thrid tyred venge wadis yipes adays buist burls conto daven deare dorsa droog eyres flogs justs katas kesar kurus lavra lisps lynes mayst mimsy moers navvy noahs nomes nonny palay pikas pinny prese pseud siles skuas sordo sumps tapis teals telic veles ackee addio astir bayed bodge brise calix fluky fundi gaols hived ileus jurat kylin latah linny mayos miffy mitis palmy papes rammy rotch shool siris varan wefts adown babul balun barky bevvy brans calfs deshi dites dooly dufus ephod felly funks heder ippon ither jehad katti khoja koker krunk kudus lobar mekka mojos momus nevel noser oared ottos pippy pujas quern regar renga roust roved salal salmi scute sough tendu tyros ameba amirs bacco barfs bedel boded boors bungs chocs coati corer coxed daube dhole fauve fayne fazes gilds hyphy inapt joyed kamas kayle lahar makos mussy opsin pilau quirt raggy talpa teras tufty usque valis weeke winge worts ariki atopy balky benne bings boffo bolar bombo chics civvy dumka fucus gelly gryce hongi jambu keens koori lauch leuco lyres malis merks moner ngoma oller palas pilch priss rebid rhody stoup swage tacho tazza waspy winos abase ablow agone bahut bajra berko bonce botas bulgy burgs cosey egads filmi firer fusil gaddi galah gazal geest gibes halva hyrax jomon kivas lurve merel moras nappe noria ogham omers pingo poule pulao rales ranee rugae rutin sauls scudi slogs smout stims talar tolar tooms veges wicky ammos anole apted botes bundu clast cloze daubs dills dolma eggar evite gooby grego iroko jowar kabar maims mesto nairu numen nyala oaten onely ozeki parer primp pures quino reify samas samen sanko sawer skald smoko styli subby thete topes trued arhat bifid brame cager cerne cotts cycad dribs gerbe hazes hypos lader ludes naggy osier peery pronk reede rosti tilth tocks virga wolly zappy anted apses arepa avgas azuki babus boomy boyos brume cymes dados fabby holms hosen hyson icers jagir kales kippa mense prems quoll redds reran rexes rotes rubby scuzz shoos stude swarf tulpa vises wecht wenge wheen alist blini boody bortz circs cozen darzi fasci flans ghast glads godet guana guyed kight kopje motts mures pells petti prate rejig sicks smolt tenue tonus tronc adman ascus boose cames churl corno gades gobbo hamal hawed hoper kalis keema korat lulus meses micas nabis nisse nitre oakum patte pongs poods poori quoit resid saine saury shoed skort sties sures taler tanky tsuba unsay waxer welke wyles abord amice aquas arrah besom botty cecal ciggy codas conky coset coxes estro gadis garbe garbs genom harim ihram mbira musks octyl onces pling polje rends rusks rutty stroy tabun tyran varix yuppy achar amnio anele gater hevea kedge kyats letup lowed mimeo nelis oaked ofter orate pargo plica poort potto recti risus shivs slive sorex talls zambo ashed aulas blabs bocks borak chimo clomp coopt empts envoi foehn fusee herma herse mesne molas offie pilus pogge reata regna reist rheas rushy scops scrag steil triac woofs yippy aviso bravi cetyl chapt dight drays drear gants gleek gobar gurry hecks hoggs ictus kanas loofa loped milko milpa ngaio noris ogles phoca pryse pukey puris rappe rills scudo septs tenia theed thees thurl veery winey yowie acers adzes bachs bouse cesta cimex conks couth cowal daggy debus demob dukas faena fitly galop gambo geats hings hooty jowly kench lehua limba limed marse matza miggs musth neeld neral ouzel quipu riata sedes spics stope sysop tasse theca tuque typic copen dulse elute gynae hexyl hucks ictal lairy lamby laris lenis loury lowan merse niter parch perve poncy rorts scand segno sexto shier sloes snugs spred stopt stoss tacan tappa tarty trone vomer whoot xylan assez barde bhoot blebs brail choko coria cowry deres duked ephah genal girds imbed jarls latke lears limas litas luces mahua milds mucor potes quate rhomb roans roods rorie rotan roves salps sherd socko tical unpin wynns alula becke bivvy chams cuber cutes daffs embar ering fakey grece gutty hinny honer kalif klieg laigh lenti leves margs mells meris meths nalas napes noels nohow palls petto prigs riced rumbo ruths sarky shott snoek socle spume stede stets trues ugali vitta wanly winna wises yakka alary amate biffo boogy botte boxen caple ceili donas flamm frate goffs goral gunky heare laves losen luffa manat poohs razes roils ronne smore alane biers bobak brugh cadge chais chape chave chich coxae dicot feres gigot goony gramp haith hodja ickle kopek linch medii parrs piked plack preop prims shans sharn simar sonde sutor warks wetly adits artel basto bialy bolls capas chyle coppy cukes curst cycas faqir jambe kacha lawer lipin mixte mozes nards neals neele palet pelon porty prill pryer roven soken sorer tinks topoi treck ukase vrouw walis agita bonza coden coper daric deles dobra easer erics faddy flics gigue glume ingan kheda koban kotch lound mairs nonet orbed popsy rhumb roule runty shews stens sural tenne thale trads trons vaunt wacks bosky buras chare chark choom cists clonk cyder daine danio demic elver flota foram frati hebes hemin hooly inkle kines krans lades linos marcs mease meril minae morat murri pated podia quais rawly rines rojak roset talak titis vegie vibey vinos zoner amain awing bitts bunya camis dacks epact gadge golpe gumps gwine idola jibed lepra lidos lolls munga muter pekan purin recal sangs seron sicht towny uncap vills whirs airth azole biros bitou buffo carns cense duros duroy eisel feare hangi hawse imide midis mopsy muser pipal roary sarod segni slank souce speel speir stept swith trapt vodun wingy boong boord caeca calmy ceder chank cooze dalis deedy elint flims gaged ghaut prent prows smarm sozin stagy stook styes surra thigs twite whump yugas arsis aures baith bocci bolds chyme clads clops felid grein gumma incog jaggy jived musos outgo pacta pards penni retie rille rugal sents sumos tamin tofts troad tutty ureas zineb addax agila amens baric bords chuse crame doffs elate erven fusel gimel indol pance peles pomps punji rakia reave sawah sodic spivs stear yabby yogin aglet avens bigha breer cines faros femal garum genua ghyll haled hided hosey jabot kreep laths lazed murre naped naras naris neeps nooit perdy poney ruche solde sopor spart swail sweed tamps unhip updos alfas balds biffs cleek commy daris decad doddy drest etape fremd fungo gaita gelid hexer hooka ikons kamis kenaf lythe marvy metho mouch oping peens pikul plash ratch scows shoon skirl starn toing vacua verst wains withs zooid zupan bakra bardy bouge drats elain gived gogos grese hayer helot knops lurgy mongs murra narks narky ontic oread rayas sirup tikis tumid vares vinal whelm yoker abler azoth belga bigos boree cauld doree drusy duing emmas eyers fondu gibus gismo gouts haint halma hamba hapax hault jhala kangs kants kores kylix lusus marid mirvs muntu navar nodus palea penes pilum poilu preve rebec salpa seans sheel tarok tawse thans uhlan vends yeard blent bonze ceric deely demes dimps dirts forky gerne goaty idees invar kaons knive maise moove ossia ranas renay rudes sakis schul sewel sewin somas steek teers thack tweel viler woofy animi banty beths coifs debes dropt fesse gemmy goris iotas kaval loges mengs monal musse nicad nomas noter onlay pocks putto rowel shiur snots tiges trows apert asdic chack culti dovie emule etage fanes fecht fiest flocs gager gleba gleed gulet hared imino laten niton ovolo pengo pulmo purls ramee ratas reges sapan sengi sophs stewy yowls apian bhuna boart doura estop fetta fordo forze fouth hable hyles laxly limen lotic lunts nocks pacos porks poult proem ratel recit sanes satem sease takas umble umiak wootz yourn yucks yulan azido clems fisty fitte gobos hefte hogen hypha luaus mincy morns moste parki pends phots pilis prees redos rudas skees snogs sorbs throe toyon troys usnea volva wodge yummo arils axman ayahs blash bodle crays fomes gamme genro gnarl grens gulph hadal heben hully iambs iring kited limax losed loups lumme lytes myoma oppos ormer ottar puker ranis ribby roton saddo sculp scurf serer squiz terce touse unsex vails vasty whity yuans zamia baals barye beamy bluet bomas filum frize gelee gosht jobes kerne koura kulas lymes mizzy namus nomic pulli radge riped rolfs saola silen skelp sloyd spile stoep swots tenes thens trogs ursae wifed abbes aroid bevor briss busks cadie calks centu creps cripe cutup cwtch dashy denar dormy doser equid farer fiere ganev gaper grots hajis houri knurl kolos koros orlon padri piani picas pooks prier rived shads tamis tavas thegn tided uncus viver waide yenta zooks aband bedes benis croci crues faugh hakes haler hongs mamey meins pawls plews redub salep seral serow soare stere tanas thoro toked vizir zouks abaci alate amole antra appui aspro azote biner bovid busti cabas crout croze cruck doats fango faver fayer filar giros heugh javas kawas laree leats linin maneh mangs pelas polks pones riant samel tatou vinas vulgo abune albas avows craws durra epode favel finos fuero guids helve hoors impis inula ixora logoi machs mooed nutsy obiit pesty relie riads rumpy shawm tined vatic wanty whits wooer aspis bahts bavin bidis dangs dooks feyer fikes foule furca gayly gippy himbo hokes kecks keeks kiter laund leccy ledum motty nival noggs notum oboli orgue pipet pirls reate spide stonk toits towse trema tuart wrang aport basan birse brens buchu choky crura darre drack forby goles hemal kadis kapas kinos mered mewed pecky puces refix scrod soras tabus tecta tegus vizor wakas wigga xebec zanza ajuga alecs almah amias aulic buret cires conns demit glams glugs grebo hoick horis houts icier kakas labra meare metic mosts nabla norks orach pareo perai pilea shash shule sprag sulfo surfy tabid upsee urman wedgy whins wrapt agria agrin belar blady cursi desse flams gnarr grogs liney lipos lyses maqui moops naans naled pavis potoo prexy rekey remen rudds sizar sored toper twirp yobbo yonis ambry apish bawds darga dowds exurb fuzed gawds hazer jujus kelps kokum korus linty livor mazey meeds mooli motza mutis poons posho poufs qanat relet rooky shaly sooks stive strim triol uncia waler whoof wilis abrin acini algor baken bimah blees cahow chiel coxal crapy crine curer disas dogie drole farse gluer goras horsy hovea inion jells knout lacer larky leeze limpa mashy nerka punga riels ruffe sayon sigla slews spays tacet tophi toter unfix yawls abuna admen bield cavas cives coure curet drave feart filos fjeld flump garre haggs jural kahal lemel mirex morae mugga obols parve puton racon ryals slier solah sonce stupe tinct tules unjam unman agami argal atomy cooey covin coyer cubeb deros diker endue flaks glary hosel katis kolas lanas mimer mingy neist oribi razee rindy rumal runed sarks scaff serac shoat shuls terne ulpan anile arret blook boxty cogon coomb coypu dekes dekko ettin farcy festy foxie girts hizen hoing javel lards lumas mezes milty mokes murks musar mysid nooky oracy orlop paeon pipis poynt ruana sarus sasin sinds tacts toras vasal acock aulos bunia compt diked disci drent fyles grees guqin intil jodel keeno koppa lauan mazed miaou octan potin quean recks scatt semes sixte soots strow yente agoge azoic bidon colza culet dadas decos degus duett dunam durry korai looey moble odeum onium pendu poddy proso pyran rasse rigol roneo sered skags tolas torse ahigh atony borts broos curdy dagos dungs elemi exeat gombo hemes hoons jefes jeton jewed jilts kiers knuts potsy ridgy sithe tores tusky tutee unbar wolve apsis arval blubs brank burds cadee chawk confs direr doole dusks entia frena guyse hillo karos larum lezzy lilts lints oinks olein oohed prink ramet raser sapor skimo sugan taros tuath varve yolky afars bancs bazoo butes dulia dures frush gawks gites hulas kazis lazzo luter munge ollas pirog qadis samek sythe tetes trigs viers volve vulns winns zanja belah blive bunde ceros chout dahls darns defog elfed enure fillo haily haoma hoise hokku indue isnae jolls kains konbu kulan melic nadas neats pomes prosy quena raggs ricey rimed ripps shtum skite sured tardo thrip timps vells vigia abash clach dicht dunch emong hafts heeze kamik kinin lazes leets nexts oflag pacas proll pynes quair sapid scray sluff sowle speal surds talea yawed airer argol basen basts cepes deked educe femmy galut gleis goosy keros lowne lysin manty miros patka prase preon sadza succi tains temes terga theek tinas volti wilga yales antre doter oater raile reast roate salet fanny fecal grope horny kinky prick semen spunk willy aahed aalii aapas abacs abaht abaka abamp abask abbed abcee abear abeat abeer abeng abers abeys abius abjad abjud ablet abmho abnet abohm aboil aboma aboon abore aborn abray abrim abris absey absit abura aburn abyes abysm acais acara accas accha accoy accra acedy acene acerb aceta acher achey acidy acies acmes acmic acned acoel acold acone acral acred acron acros acryl actas actus acyls adats adawn adaws adbot addas addin addra adead adeem adhoc adlib admix adnex adoon adorb adoze adrad adraw adred adret adrip adsum aduki adunc adust advew advts adyta adyts adzed aecia aeger aevum afald afanc afara afear affly afion afizz aflaj aflap aflow afoam afret afrit aftos agals agamy agars agasp agast agaty agaze agbas agene aggag aggri aggry aghas agidi agism agist aglee agley agloo aglus agmas agogo agons agros agrum agued agues aguey aguna agush aguti aheap ahent ahind ahing ahint ahole ahull ahuru aidas aidoi aidos aiery aigas aimag aimak ainee ainga airns airts aitus aiver aixes aiyah aiyee aiyoh aiyoo aizle ajies ajiva ajupa ajwan akara akees akene akkas akker akoia akoja akoya aksed akses alaap alala alant alapa alaps alata alays albid alcea alces alcid alcos aleak aleem alefs aleft alews aleye algas algid algin algos algum alick alifs alims alios alkie alkin alkos allan allel allen aller allin allod allus almeh almes almud almug alods aloed aloin aloos alose alowe alumy alure alurk alvar amahs amari amaro amaut amban amene amids amins amlas ammas amnia amnic amoks amore amort amove amowt ampul amyls ancle andic anear anigh anils ankhs ankus anlas annan annat annum annus anoas anomy ansae ansas antae antas anura apage apaid apayd apays apeak apeek apers apery apiol apism apode apods apols apoop appam appay appts appuy apsos araks arame arars arbah arbas archi ardeb ardri aread areae arear aredd arede arefy areic arere arets arett argil argle ariot arith arked arled armet armil arnas arnis arnut aroba arpas arpen arroz arsed arses arsey artal arter artly aruhe arums arvee arvos aryls asada ascon ashet asity askar askoi askos aspie assed asses assot astun asura asway aswim asyla ataps ataxy atigi atilt atimy atmas atmos atocs atoke atoks atrip attap attas atter atuas aucht audad audax augen auges auloi aumil aunes aurae aurar aurei avale avels avine avise avize avyze awari awarn awato awave awdls aweel aweto awkin awmry awned awner awols awork axile axite axled axmen axoid axone ayaya ayelp aygre ayins aymag ayont ayrie azans azine azlon azons azurn azury azygy azyme azyms baaed baaps babby backy bacne badam baels baffs baffy bafta bafts baghs bagie bagsy bagua bahus baiks baile baisa baiza bajri bajus ballo balls baloi balon balot balus balut bamas bamma bammy banak baned banky bantz baons baozi bappu bapus barfi barfy barms barps basas basha batos battu bauds bauks baurs bawks bawns bawrs bawty bayas bayer bayts bazas bball bdays beals becap bedad bedew bedim bedye befog begad begar begem begob beigy beins beira beisa belee belit belli bello belve bemad bemas bemix bemud benji benty bepat beray berme berob besat besaw besee beses besit besot besti beted betes betid bevan bevue bewdy bewet bewig bezes bezil bezzy bhais bhats bhava bhels bhuts biach biali bibes bibis biccy bices bicky bider bidri bigae bihon bikky bilal bilat biled bilgy bilks bimas binal bingy binit binky bints biogs bions biont biose bippy birdo biris birle birls birrs birsy birze birzz bises bisks bisom bitch bitey bitos bivia bizes bizzo blads blaer blaes blaff blags blams blanc blate blats blaud blawn blaws blays bleah blear blech blert blets bleys blimy blins bliny blist blite blits blonx blude bluds bludy bluid blunk blype boabs boaks boaty bobac bobas bobol bobos bodgy bodoh boeps boers boeti boets boffs bogue bohea bohos boked bokes bokos boldo bolet bolix bolks bomoh bomor boner bonie bonum booai booay boobs boofy boohs bools boppy borek borks borms borty bosey bosks bossa boteh botel botew botos bouks bouns bourd bousy boutu bowat bowet bowrs bowse boxla boyau boyed boyey boyfs boygs boyla boyly boysy brahs braks braky brast braws braxy braza breem breid breis breme brere brers breys bries briki briks brins brios brods brogh brogs brond brool brosy bruck bruhs bruja brujo brusk bruts bruvs buats buaze bubal bubas bubbe bubus bucku budas buded budes budis budos buena buffe buffi bufos bufty bugan buhls buhrs buiks bukes bukos bulse bumfs bumph bunas bundh bunje bunjy bunns buppy burfi buroo burra busky bussu busty butle butoh butut buyin bwazi byded bydes byked bykes byrls byssi caaed cabob caboc cabre cacas cacks cacky cadgy cadis caese caffe caffs cagot caids calid calle calos calpa calps caman cando caneh cangs canns canti capax caphs capot capri capul carap carks carne carpe carvy caser casky cauks cauls caums caups cauri cavel cavie cavus cawed cawks caxon ceaze cebid ceils celly celom ceorl cered cerge ceroc certy cesse cesti cetes cezve chaap chaat chado chaft chals chava chawl chaws chays cheba chedi cheeb cheet chelp chems cheth chias chiba chiko chiks chimb ching chink chirl chirm chirr chirt chiti chiva chivs chivy chizz chogs choil chons choof choss chott chufa churr chuts chynd cibol cided cides ciels cills cimar cinct cinqs cions cippi cirls cital citee citer civie clags clair clame clapt clart clats claut clavi cleck cleep clegs cleik clepe clept clied clies clipe clipt clits cloam cloff clomb clons cloop cloot clote clour clous clows cloye cloys cluey clype cnida coact coady coala coaly coapt coarb cobot cobza cocas cocks cocus cogie cogue cohab cohoe cohog cohos coign coirs coits cokey coled colle colog comae comby comme conex conge conia conin cooer coofs cooms coomy coons coost cooty copha copsy coqui corbe corda corni cosec cosed coses cosie cotan cotch coted coths coude courb courd couta cowks cowps coxib coyau coyed cozed cozes cozey cozie craal crare crein crema crems crena crepy crias cribo crink crins crios crips criss crith crogs cromb crons crool crost crowl crudo cruds crudy cruor crusy cruve crwth cryer cryne ctene cucks cudda cueca cuffo cuifs cuish cuits culch cumec cunei cunit cunny cunts cupel cupro curat curch curfs curli curns curny currs cusec cusks cuspy cusso cusum cutin cutto cuzes cyans cylix cymae cymar cymas cymol cytes cyton daals daces dadah dadis dadla dahis daiko daint daker daled dalek dalts damna dampy danda danse dants dappy daraf darbs darer dargs darls datal datil dauby dauds dault daurs dauts dawds dawed dawen dawgs dawks dawts dayal daych daynt dazer dazes dbags deair dearn deash deave deaws deawy debag debel debud debur decan decim decko decyl dedal deens deeve deevs defat defis degum deice deids deils deink deled delfs della demoi demot dempt denay dench denet dente deoch derat dered derig derms derns derny derpy derro derth dervs desex desis detag devis devos devot dewax dewed dexes dexie dexys dhaba dhaks dhals dhikr dholl dhols dhoni dhuti diact diana dicks dicto dicts dictu dicty didie didis didos diebs diels dikas dikey dildo dimbo dinic dinks dinlo dints dioch diota dipso diram dirke dirls disme dital ditas dited ditts divey divna divos dizen djins doabs dobes dobla doble docht docos docus doeks dogal dogan dogey dogly dohyo doilt doits dolee doley dolia dolie dolos domal domic donah donko donsy doobs dooce doofs dooky dools dopas doppe dorad dorba dorbs dorje dorps dorrs dorse dorts dorty dosai dosas doseh dosha dotal douar doucs douks doums doups douts doved doven dowak dowar dowed dowfs dowle dowls dowly downa dowps dowts doxed doxes doyly draff drail drant draps drapy dreed dreer dreks drere dreys drice dript drock droil droke drony droob drook drouk drows drubs druxy dryas dsobo dsomo duads duans duars dubby ducti duded duits dukka dukun dulce dules dumky dunsh dunts duomi duply dured durgy durns durrs durzi duxes dwaal dwale dwalm dwams dwamy dwang dwaum dwile dwine dyked dykes dykey dykon dynel dynos dzhos eagly eagre ealed eaned eards earnt earst easle eathe eatin eaved eaver ebank ebbet ebena ebene ebike ebons ecads ecard ecash eched eches ecigs ecole ecrus edile educt eensy eeven eever eevns effer efits egers egest egmas ehing eigne eiked eilds eiron ejido ekdam ekkas elans elchi eleet eliad elmen eloge elogy eloin elops elpee elsin elven embay embog embow embox embus emeer emerg emeus emics emmew emoji emove emure emyde emyds enarm enate endew enfix enlit enmew ennog enols enorm enows ensew ensky entre enurn enzym eolid eorls epees epena epene ephas ephor epopt eppie epris eques erbia erevs ergos erhus erned ernes erose erses eruct erugo eruvs ervil escar escot esile eskar esnes esrog estoc etens ethal ethne etics etnas etrog ettle etuis etwee etyma eughs euked eupad eusol evegs evets evhoe evohe ewest ewhow ewked exeem exeme exfil exier exies exine exing exite exode exome exuls eyass eyots eyras eyrir ezine fabbo facey facie facta facto facty fadge fados faffs faffy fagot faiks fains faire falaj fales falsy fanal fands fanga fanks fanos fanum farci fards farle farls farro fatly fauch fauld faurd faute fauts favas favus fawny feals feard fease feaze feces fecks fedai feebs feely feens feers feese feeze fehme felch felix femes femic fendy fenis fenks fents feods feoff ferer ferly ferms ferox fetas fetor fetts fetwa feuar feued feyed feyly fezes fezzy fiars fices fichu ficin ficos ficta fidge fidos fidus fient fieri fifed fifis figgy figos fiked filks filon fiqhs fique firie firks firma firni firns firry fiscs fisho fisks fixie flabs flaff flamy flane flary flawn flawy flaxy fleam fleek flegs fleme fleur flews flexi fleys flimp flirs flisk flitt flobs flong flore flors flosh flote flowy flued fluey flurr fluty fluyt flyin flype fnarr fogie fogos fogou fohns foids foins fones fonio fonly forma fouat fouds fouer fouet fowth foyne frabs fract fraim frais frape fraus freet freit freon fribs frigs frita frite fritt froes fromm froom frore frorn frory frows frowy froyo frugs frust fubby fubsy fucks fudgy fuffs fuffy fuggy fugie fugio fugis fugle fugus fujis fulla fulth fulwa fumer fumet funda fundo fungs funic funis funsy funts fural furls furol furos furrs furzy fusks fusts fuzee fuzil fyces fyked fykes fyrds fytte gadgy gadid gadje gadjo gadso gaids gairs gaitt gajos galed galia galis galvo gamas gambe gambs gamic gamps ganch ganef ganks ganof gapos garam garba garde gares garms garri gashy gaspy gasts gatch gaths gauch gaucy gauds gauje gaums gaumy gaups gaurs gavot gawcy gawps gawsy gayal gazar gazon geals geans geare geasa gebur gecks geeps geits gelds gelts gemel gemot genae genas genin genio genip genty gerah geres gerle gesse gests getas geums geyan ghees ghest ghusl gibed gibel giber gibli gighe gilia gilpy ginch ginga gings ginks ginzo gipon gippo girlf girns girrs girsh gisms gitch giust glaik glair glamp glatt glaum glaur glazy gleby glede gleds gleet glent gleys glias glibs gliff glift glike glime glims glisk glits gloam globi globy glode glogg gloms glops glost glout glowy gloze glugg glums gnapi gnars gnawn gnows goafs goaft goary goave goban gobbe gobis godso goels goety gogga goier gojis gokes golps gonch gonef gonia gonif gonks gonof gonys goodo googs gooky gools gooly goomy goops goors goory gopak gopik goray gorbs gordo gorms gormy gorps gorsy gotch gothy gouch gouks goura goved goves gowds gowfs gowks gowls goxes graip grame grano grapy grata grats gravs grege greps grews gride grigs grike gript gripy grisy grith grize groks groma groms grone groof grouf grovy grrls grued grues grufe grume gryde gryke grype grypt guaco guans guars gubba gucks gucky gudes guffs gugas guggl guido guimp guiro gulab gulas gulfy gulpy gummi gunas gundi gungy gunks gurdy gurge gurks gurly gurns gursh gusla gusle gusli guyle gyals gyans gybed gybes gyeld gymps gynie gynny gynos gypes gypos gyppo gyppy gyral gyred gyron gytes gyved gyver gyves haafs haars haats habus hacek hacky haded haems haere haets haffs hafta haham hahas haick haika haiks hajes hakas hakus haldi halid halms halsh halwa hamel hanap hanch handi hapas happi hapus harls harns haros hashy hasks hasps hathi hatty hauds haufs haugo hauld haulm hauns havan havel hawms hayed hayey hazle heame heapy heast heaty hedgy heedy hefts heiau heids heils hejab hejra heled heles hella helly hemic hemps hempy hench hends hents hepar herls herns herps herye hesps hests hetes heths heuch hevel hewgh hexad heyed hiant hibas hiems hifis hikoi hilch hilsa hilus hinau hiois hiped hiper hipes hiply hiree hists hithe hoach hoaed hoars hoast hodad hoers hoghs hogoh hogos hohed hoied hoiks hokas hoked hokis holks holme holos homas honds hoogo hooha hoord hoosh hoove hopak horah horal horks horme hoten hotis hotte houff houfs hoved hoves howay howbe howff howfs howks howre howso howto hoxed hoxes hoyed hubba hudna huers huhus huias huies hukou hules hulky humas humfs hundo hurds hurty hushy husos hutia huzza huzzy hwyls hydel hyens hygge hying hykes hyleg hylic iambi ibrik iched iches icker ictic idant iddah iddat iddut idlis idyls igapo igged iglus ignis iiwis ikans ikats ileac ilial illth imagy imaum imbar imbos imido imids imlis immew immit immix imped impot impro imshi imshy inarm inbye incas incel incle incut indew indow inerm inned innie inorb inros inrun insee inspo intis inurn inust inver inwit iodic iodid iodin ioras irade irids irone isbas ishes isled istle ivied ixias ixnay ixtle izars jaaps jacal jacet jafas jagas jaggs jagra jaker jakie jalap jaleo jalop jamun janky janns janty japed japer jarks jarps jarta jarul jasey jaspe jasps jatha jatis jatos jauks jaune jaups jawns jaxie jeats jeels jeely jeera jeeze jehus jelab jembe jeons jerid jessy jetee jetes jewie jheel jhils jiaos jibba jibbs jiber jiffs jigot jimpy jings jinne jirds jirre jisms jitis jitty jiver jivey jobed jocky jocos jokol joled joles jolie jollo jolty jomos jongs jooks jorts jorum jotas jotty joual jougs jouks jowed jubas jubes jucos judgy judos jugum jukus julia jumar jumby jupes jupon jurel jures juris juste jutty juves kaama kacks kadai kades kagos kagus kaiak kaids kaies kaifs kaika kaiks kails kaims kaing kajal kakis kalas kalua kamme kanal kanat kaneh kanzu kapai kapha kaphs kapow kapur kapus karai karee karez karks karsy karzy kasme katal kaugh kauru kaury kavas kawau kawed kayos kbars kcals keaki kebar kebob kedgy keefs keets keeve kehua keirs kelep kelim kelpy kelts kembo kembs kempy kenos kepis kerel kerfs kerky kerve kests ketas ketes ketol kevel kevil kexes keyer khads khafs khana khaph khats khazi kheer kheth khets khirs khors khoum khuds khula khyal kiaat kiack kiaki kiasu kibbi kibei kibes kibla kidel kideo kidge kiefs kieve kievs kikay kikes kikoi kilig kilps kimet kinas kingy kiore kipah kipas kipes kipsy kirns kirri kists kitab kithe kiths kitke kitul klaps kliks knags knaps knarl knars knaur knawe knick knoop knosp knoud knowd knubs knule knurr knurs koaps kobos koels koffs kogal kohas koiwi kojis kokam kokas kokra kombi konks kophs koran koras koris korun koses kotos kotow krais krays kreef kreen kreng kriol krubi krump ksars kubie kufis kuias kukus kumis kumys kunas kunds kuris kurre kusso kusti kutai kutas kutis kutus kuyas kuzus kvell kwaai kwela kwink kwirl kyack kyaks kyang kyars kybos kydst kyloe kynde kynds kypes kytes kythe kyudo laarf laari labda labia labis labne laccy lacet lacis lacka lacky laddu laddy laded ladee ladoo laers laevo lagar laggy lahal laics laide laids laiks laked laldy lalls lanch laned lanks lants lapas lapje lappa lappy larfs larga larns larnt lased lases lassu lassy lathy latus laude laufs laval laved lavvy lawed lawin lawks lawny lawsy laxed laxes layby lazos lazzi leady leams leany leare leaze leche ledes ledgy leear leeps lefte leggo legno lehrs leirs leish lemed lemes lemme lenes lengs lenos lepak lepid lepta lered leres lerps leses lesos lests letty leuch leuds leugh levas lexes lezes lezza lezzo liart libor libre licet lichi liefs lieus lifey ligan ligge lills lilos lilty limbi limby limma limns lingy linns lipas lipes lirks lirot lises lisks litai lited litem liths litie liwaa liwas loast loave lobus loche lochy locie locis locky loggy loids loipe loirs lokes lokey lokum lolas loled lollo lolog lolos lomed lomes looed loofs looie looky loord loppy lorel loric losel lotah lotas lotes lotsa lotta loued louma louns loure lours lovee lovie lowen lownd lowns lowps lowse lowth lowts loxed loxes lozen luach lubra ludos luffs luged luges lumbi lummy lunet lunks lurer lurgi lurry luser lushy lusks luted luvvy luxed luxer luxes lweis lyams lyard lyart lycea lyted lytta maaed maare maars maban mabes macas macca macka macle macte madal madar maddy madid mados maedi maerl mafts magas magna magot mahal mahem mahis mahoe mahrs mahwa maiks maill mailo maist majas majat majoe majos makaf makai makan makee makie malae malai malax maleo malky malms malmy malus mamak mambu mamee mamil mands mandy maneb mangi manie manks manny manoa manso mante mants manul manzo mapau mapes mapou mappy maqam maral maran maray mards marga margo maril marma marms maror marra marua masas mased mases masha masty masur masus masut mathe matlo matra matsu matty mauby mauds mauka maula maums maumy maunt mausy mauts mauvy mauzy mavie mawed mawks mawky mawla mawns mawps mawrs mayed mazac mazak mazar mazas mazel mazet mazut mbari mbars mbila mbret mbube mbuga meake meaks meane mebbe mebos mecha mechs mecks mecum medin medle meech meeja meeps meffs meids meiko meils meint meiny meism meith melam melch meles meloe melos memic menad mence mened menil mensh ments meous merds merer merls mersk mesad mesal mesca mesel mesem meshy mesia mesyl metas meteg metel methi methy metif metol metta meums meved meves mewls meynt mezza mgals mhorr miais miasm miaul michi micht micos midgy miens mieux mieve miffs mifty migma migod mihas mihis mikan mikos mikra mikva milfs milly milor milts miltz mimis mindi mingi minse minxy miraa mirah mirch mirid mirkn mirks mirky mirls mirly mirrl mirrs misal misdo misgo misky misls misos misto mitas mitey mitie mitry mitta mivey mivvy mixen mixie mixis miyas mizes mmkay mneme moais moaky moals moana moany moars mobby mobed mobee mobes mobey mobie mobos mocap mochi mochs mochy mocky mocos mocus modge modii modin modoc modom moeni mofos mogar mogas mogos mogra mogue mohar mohos mohrs mohua mohur moile moils moits moity moker mokey mokis mokky mokos mokus molal moled moler moley molie molle mollo moloi molos molue molvi molys momes momie momme momos mompe monic monpe mooey mools mooly mooni moory mooth moper moppy mopus morah moran moree morgy morin mormo morna moror moruk mosed mosks mosto moted motey mothy motis moton moues moufs moule mouls mouly moups moust mowas mowie mowra moxas moyas moyls mozed mozos mpret mrads msasa mtepe mucic mucid mucko mucro mudar mudif mudim mudir muffy mugho mugil mugos muids muils muirs muiry muist mujik mukim mukti mulai mulct muled mulie mulse mulsh mumbo mumms mumph mumus munds mundu mungi mungs mungy munia munja munjs munts muras mured murgh murgi murls murly murrs murth muruk murva musee muset musit musta mutas mutha mutic muton mutti mutum muvva muxed muxes muzak mvula mvule mvuli myals mynas myoid myons myope myops myopy mysie mythi mythy myxos mzees naams naats nabam nabby nabes nabks nache naeve naevi naffs nagar nages nagor naibs naice naids naieo naifs naiks naily nains naios najib nakas naker nakfa namad namak namaz nanos nante nanti nanto nants nanty nanua napas napoh napoo naric narod narra nasho nasis nason nasus natak natis natto natya nauch naunt naved navew nawal nazar nazes nazzy nduja neafe neant neaps neato nebby nebek neche neebs neefs neemb neems neeze nefie negri negro neifs neive nelia nemas nemic nemns nempt nenes nenta neosa neoza neper nepit neram nerfs nerks nerol nerts nertz neski nesty netas netes netop netta netts neuks neume neums nevis nevvy newbs newed newie nexal nexin nexum ngaka ngana ngapi ngege ngoni ngram ngwee nibby niced nicey nicky nided nides nidor niefs niess nifes niffs niffy nifle nigga nighs nigre nigua nikab nikau nilas nills nimbi nimbs nimby nimps niner ninta niopo nioza nipas nipet nirls nirly nisin nital nitid nitry nitta nitto nivas nivel nixer njirl nmoli nmols noded nodum noema noeme nogal noggy noias noils noily noint noire nokes nolle nolls nolos nomoi nonan nonas noncy nonda nondo nongs nonic nonna nonno nonyl noois noone noops noove norie noshi nosir notal notam nougs nouja nould noule nouls nouny noups noust novia novio nowds nowed nowls nowts nowty noxal noxas noxes noyau noyed nrtta nrtya nsima nucha nucin nuddy nuder nudes nudgy nudie nudzh nuevo nuffs nugae nujol nullo nully nummy numps nunks nunky nunny nunus nuque nurds nurdy nurls nurrs nurts nurtz nused nuses nyaff nyams nying nyong nyung nyuse nyuze oafos oaker oarer oasal oasts oaves obang obbos obeli obias obied obole oches ochry ocote ocrea octad octas octic octli odahs odals odism odist odoom odums odyle odyls ofays ofuro ogams ogeed ogees oggin ogler ogmic ohelo ohias ohing ohone oicks oidia oilet oints oiran ojime okehs okies oking okole okras okrug oktas olate oldly olehs olent oleos oleyl oligo olios oliva ollav olona olpae olpes omasa omber ombus omdah omdas omdda omdeh omees omiai omlah ommel ommin omnes omovs omrah omuls oncer oncet oncus ondes ondol oners onery ongon onkus onlap onmun onned onsen ontal ooaas oobit ooids oojah oonts oopak ooped oopsy oorie ooses ootid ooyah oozie oozle opahs opepe opery opgaf opihi opsat opsit opter opzit orans orant orbat orbic orcin ordie orfes orful orgia orgic origo orixa orles ornee ornis orped orpin ortet orzos osars osetr oseys oshac oskin oslin osmic osmol osone otary othyl otium oubit ouche oucht oueds ouens oulks oumas oundy oupas ouped ouphe ouphs ourey ourie ousel ousia outby outen outie outta ouzos ovels ovism ovist ovoli oware owari owche owers owies owled ownio owres owrie owsen oxeas oxers oxeye oxids oxies oxims oxine oxlip oxman oxmen oxter oyama oyers ozena paaho paals paans pacai pacay packy padam padas paddo padis padle padou pagle pagne pagod pagri pahit pahos pahus paiks paipe paips pakay pakki pakua pakul palak palar palis palki pallu palsa palus pamby panch pands panim panir panks panna panni panny panty papad papey papri parae parcs paren pareu parev parge parid parma parmo parms parps parte pasag pasar pasch pases pashm paska pasmo paspy passu patas patee patel patia patly patta pattu patus pauas pauxi pavas paven pavid pavie pavon pavvy pawas pawaw pawer pawks pawky paxes paysd peage peags peake peans peare peasy peaze pebas pechs pecia pecke pects pedis pedon pedos peece peeky peely peent peeoy peepe peepy peevo peghs pegma pegos peine peins peise peisy peize pekau pekea pekes pekid pelau pelch pelfs pelma pelog pelsh pelta pelus pened penie penis penks pense pensy pents peola pepla peple pepon pepos pepsi pequi perae percs perfs perle perls permy perne perns perog persp perst perts pervo pesch pesta petos pewed pewit peyse pfftt phasm pheer pheme phene pheon phese phies phish phizz phobe phons phooh phooo phota photy phpht phubs phuts phutu phwat phyle phyma phynx physa piais pians pibal pical piccy picey pichi picon picra picul pieds piend piert piets pight pigly piing pikau pikel pikis pilae pilao pilaw pilei piler piley pilin pilon pilow pimas pinax pince pinda pinds piner pinga pinge pinol piony pioye pioys pipas pipid pipul piqui pirai pirks pirns pirre pirri pirrs pises pisky pisos pissy piths pitot pitso pitsu pittu piuma piums pivos pixes piyut pized pizer pizes plaas plaga plaig planc planh plaps platt plaud plaur plavs pleck pleep plein plene pleno pleon plesh plets plexi pligs plims plips plish ploat ploce plock ploit plomb plong plook ploot plore plouk plout plowt ploye pluds plues pluff pluke plumy plung pluot plups plute pluto pluty plyer pneus poaka poake poalo pobby poboy pocan poche pocho podal podex podos podus poena poeps poete pogey poggy pogos pogue pohed poind poire pokit poler pollo polts pomas pomme pomos pompa pondy pongy ponks ponor ponto pooay pooed pooey poofs poofy poohy pooly poopa poopy pooty poove poovy popia popos popup porae poral porer porey porge porin porno porns porny porte porth porus posca poset posol poste potae potai poted potro pouce pouff poufy pouis pouke pouks poulp poupe poupt pousy povos powan powie powin powis powlt pownd powns powny powre powsy poxed poxes poyas poyou poyse pozzy praam prads prags prahu praos praps praty praus preak predy preed preem preif preke premy preta preux prial prian pridy prief primy pring prius proal proas proby prodd proin proke prook proot prora prore proul prowk proyn pruno prunt pruny pruta pryan pshut psias psoae psoai psora ptish ptype pubby pubco pubes pubsy pucan pucer pucka pudic pudor pudsy pudus puers puffa pugil puhas pujah pukas pukus pulas puled puler pules pulik pulka pulks pully pulus pulut pumie pumpy punas punce pungi pungo pungs pungy punim punka punty pupas puppa pupus purao purau purda purdy pured purga puros purps purpy purre purry pursy puses pusle pussy putas puter putid putin putos puttu putza puuko puyas puzel puzta pwned pyats pyets pygal pyins pyned pyoid pyots pyral pyric pyrus pyuff pyxed pyxes pyxie pzazz qaids qajaq qapik qilas qipao qophs qorma quabs quags quaky qualy quank quarl quass quats quawk quaws quayd queck queek queem queme queso quete queyn queys queyu quibs quich quies quila quims quink quipo quirl quods quoif quois quonk quops quork quorl quouk quoys quran qursh quyte raads raake rabic rabis raddi raddy radgy radif rafee raffs raffy rafik rafiq rafty ragde ragee ragis ragus rahed rahui raiah raias raike raiks raird raith raits rajes rakee rakhi rakis rakki raksi rakus ralli rames ramon ramse ramsh rando raned ranes rangs ranid ranns ranny ranse ranty raped rapee raper rapes rapin rapso rared raree rarks rasam rasas rased rases ratal ratoo ratos ratti ratus rauli rauns raupo ravey rawdy rawin rawks rawns raxed raxes rayah rayle rayls razai razet razoo readd reais reaks realo reame reamy reans reard rebab rebit rebop rebud reccy recep recte recue reded redia redif redig redip redly redry redug redye reeaf reech reefy reeky reely reems reens reerd reest reeze refan refed refel reffo refis refly refry reget regex reggo regia regle regma regos regot regur rehem reifs reiks reine reing reink reird reive rejas rejon reked rekes rello relos remet remex remou rendu reney rengs renig renks renos rente reoil reorg repas repat repeg repen repla repps repun reput rerig resam resat resaw resay resee reses resew resod resol resow resty resue resus retag retam retax retem retia retin retip retox reune reups revet revow rewan rewax rewed rewet rewin rewon rewth rezes rhabd rheid rheme rhies rhime rhymy rhyta riato riche ridic riems rieve rifer riffy rifte rifty rigmo rikka rikwa rilly rimae rimon rimus rince ringe ringy rione rioty ripes riqqs risps rists rithe rivel rizas roady roake roaky roany robbo rober robug robur roche roded rodny roers rogan roguy rohan rohes rohun rohus roids roily roins roist rojis roked rokes rokey rokos rolag roleo rolly romal romer rompu rompy rones ronte ronts ronuk roofy roons roops roopy roral rores roric rorid rosal rosco rosed rosha rosit rosps rossa rosso rosts rotal roted rotls rotos rotta rotte rotto rotty roues rouet roufs rougy rouks rouky rouls roums roups roupy rowet rowie rowme rownd rowns rowth rowts royet royne royst rozes rozet rozit ruach rubai ruban rubio rubli rubor ruchy rudis ruers ruffy rufus rugas ruggy ruice rukhs rully rumes rumly rumpo runce runch runds runer runos runup ruote rupia rurps rurus rusas rusky rusma ruvid rybat ryiji ryijy ryked rykes rymer rymme rynds ryoti ryots ryper rypin rythe ryugi saags sabed sabji sabos sabzi sacre saddy sades sadhe sadic sadis sados saeta sagar sagos sagum sahab saice saick saics saims sairs saist sajou sakia sakti salas salat salis salol salse salud salue salut samfi samfu sampi samps sanad saned sards sared sargo sarir sarvo saser satai sater sauba sauch saugh saunf saunt sauts sauve savey sayas sayee sayne sayst sazes scags scail scall scapi scath scaud scaur scaws sceat scend schav schif scifi scind scire sclim scobe scody scogs scoog scorp scote scoug scoup scowp scrab scrae scraw scrob scrog scroo scrow scuft scugs sculk sculs scups scurs scuta scuts scyes sdayn sdein seame seare seaze sedgy seeld seels seepy segas segol segos sehri seifs seils seirs seise seism seity seiza sekos sekts selfy selky semas semee semie senas senes senex sensu senvy sepad sepic seppo seria seric serir serks serrs sesey setal seter seths sevak sevir sewan sewar sewen sexer sexor seyen sezes shaka shakt shalm shaps shchi sheal sheas shend sheng shent shero shets shiai shily shiok shirr shirs shist shite shits shlep shlub shmek shmoe shoer shogs shojo shonk shorl shote shoud showd shris shrow shtar shtik shtup shuba shuln shwas sials sibbs sibia sices sicky sidas sidey sidha sield siens sient sieth sigri sijos sikas siker silds siled simis sined sinhs sinky sinsi siped sirih siroc sirra sises sista sists sitch situp sixmo sizel skail skank skarn skart skats skatt skaws skean skear skeds skeed skeef skeer skeet skeev skeez skegg skegs skelf skelm skens skeos skeps skerm skers skets skiey skios skirr skivy sklim skobe skody skoff skofs skogs skols skosh skran skrik skroo skugs skyed skyer skyey skyfs skyre skyrs skyte slaes slaid slart slaws slebs sleer sleys slily slipe slipt slish sloid slojd sloka slomo sloom slopy slorm slove slubb slubs slued slues sluit slurb sluse sluts slyer slype smaak smaik smalm smalt smaze smeek smees smeik smeke smerk smews smick smily smirr smirs smize smogs smoor smorg smowt smugs smurs snabs snars snary snash snath snaws sneap snebs sneck sneds snees snibs snied snies snift snigs snipy snirt snits snive snods snoep snool snowk snush snyes sobas socas soces socia softa soger sohur soily sojas sojus sokah sokes solds solei songo songy sonly sonse sonsy sooey sooky soole sools sooms soops soote soral sorbi sorda sords soree sorgo sorns sorra sorus soths sotol sotto souct souly soums souts sowar sowce sowff sowfs sowls sowms sownd sowne sowps sowse sowth soxes soyas soyle spack spado spads spaed spaer spaes spags spahi spail spait spald spale spalt spane spard spaul spawl spaws spayd spaza spazz speat spect speil speks speld spelk speos spesh spets speug spewy spial spifs spiks spims spiry splog spods spoom spoot sposa sposh sposo sprad sprew sprod sprug spued spuer spues spugs spule spumy sputa spyal spyre squee squeg squit srsly staig stans staps stary statu staun staws stean stedd steds steez steik steme stend steys stied stilb stime stimy stire stirp stivy stoae stoai stoas stobs stogs stogy stoit stoln stond stonn stoor stots stoun stown stowp strae strag strak strig stucs stulm stums stush styed styme stymy styre styte subak subas sucks sucky sudan sudds sudor suent suers suete suets suety sughs sugos suhur suids suint sujee sukhs sukis sulls sulph sulus sumis sumph sunis sunks sunns sunts suona suped surgy sused suses susus swack swads swaly swapt swayl sweal sweel sweer swees sweir swelt swerf sweys swies swile swits swive swobs swole swoll swoln swops swopt swoun sybbe syboe sybow sycee syces sycon syeds syens syker sylis symar synds syned synes syped sypes syphs syver taals taata tabac tabis tabls tabos taces tachi tachs tadah tafia taggy tagma tagua tahas tahrs taigs taish taits tajes takhi takht takky talcs talcy talik tamas tanhs tania tansu tante tanty tapen tapet tapus tards tared tarka taroc tarre tarse tarte tarzy tasar tasca tased tases tassa tasso tasto taths tatie tatus tauld tauon tauts tauty tavah taver tawaf tawai tawed tawer tawie tawts taxer taxor tayra tazze teade teads teaed teaks teaze tecum teels teend teene teets teffs teggs tegua tehee tehrs teiid teils teind teins tekke telae teloi temed temse tenty tepal tepas tepoy terfe terre terts terza teths tetri teuch teugh tewed tewel tewit texes texta thagi thaim thanx tharm thars thawt thawy theic thelf theor theow thesp thews thewy thilk thirl thoft tholi thots thowl thrae thraw thuya thymi thymy tians tiare tiars ticca ticed tices tiefs tifos tifts tigon tikas tikia tinds tinto tinty tipup tirls tirrs tirth titar titas tithi titin titir titty titup tiyin tiyns tizes toaze tocky tocos todde todea todos toeas toffy tofus togae toged toges togue tohos toidy toise toity tokos toled tolts tolus tolyl tombo tomen tomia tomin tomme tomoz tondi toped topee topek tophe tophs topis torcs torot torrs torsi torsk tosas tosed toses toshy tossy tosyl touks touns tousy touze touzy towai towno towsy towts towze towzy toyer toyos tozed tozes tozie trabs trady traga trags tragu traik trape trapo trass trats tratt trayf trefa treif trems trest trets treyf tride trifa triff trild trins trior tripy troak troat trock trode trods troke tronk trooz tropo trugo trugs tryer tryke tryma tryps tsade tsadi tsked tsubo tuans tubae tubar tufas tuffe tugra tuile tuina tuism tuktu tulps tulsi tumps tumpy tunds tungs tupek tupik turfy turme turms turnt turon turrs tushy tutes tuyer twaes twals twank twats tways tweep tweer twier twilt twink twiny twire twirk twocs twoer twonk twyer tyees tyiyn tymps tynde tyned typal typey typps typto tythe tzars ubacs ubity udals udons udyog ugged ulans ulmin ulmos ulnad ulnae ulnas ulvas ulyie ulzie umbos umbre umiac umiaq ummas ummed umped umphs umpie umpty umras unagi unais unapt unarm unaus unbag unbed unbid unces uncos uncoy undam undee undos undug uneth ungag unget ungod ungot ungum unhat unica unios unked unket unkey unkid unkut unlap unlaw unlay unled unleg unlet unlid unmad unmew unmix unode unold unown unpay unpeg unpen unply unpot unput unred unrid unrig unrip unsaw unsee unsew unsod unsub untag untax untin unwet unwit unwon upbow upbye updry upful upjet upled uplit upran uprun upsey uptak upter uptie uraei urali uraos urare urari urase urbex urbia urdee ureal uredo ureic ureid urent urger urial urite urnal urned urped ursid urson urubu urupa urvas usens useta usnic ustad uster usure utero uveas vacas vacay vacui vacuo vadas vaded vades vadge vaids vaire vairs vairy vajra vakas valli vaned vanga vangs vants vaped vaper vapes varda vardo varec vasts vatas vatha vatje vatos vatus vauch vaute vauts vawte vaxes veals vealy veeps veggo vegos vehme veily velds venae venas vendu veney venin venti verba verde verre versa verte veuve veves vexer vexil vezir viand vibed vibex viced vicus vieux viewy vifda viffs vigas ville vimen vined vinew vinho vinic vinny vints viold vired virgo virid virls vised visie visna visne vitro vivda vivos vivre vlast vleis vlies voars vobla voddy voema vogie voici voips volae voled volet volke vouge voulu vower voxes vozhd vraic vrils vrous vrows vuggs vuggy vughs vughy vulva vutty vygie waacs wacke wadas wadds wadge wadts waffs wahay wahey waift wairs wakfs walds waled walie walty wamed wames wamus waney wanks wanky wanle wanta wanze waqfs warbs wared warst wases washi wasms wasts watap wauff wauks waulk wauls waurs wawas wawes wawls wayed weals weamb weeis weels weens weest weete weets wefte weids weils weize wekas welks welkt wembs wenny wents werfs weros wersh wetas wexed wexes whamo whams whaps whaup whaur whear wheek wheep wheft whews wheys whids whies whift whilk whios whipt whiss whops whore whort whows whups whyda widdy wiels wifie wifts wifty wiled wilja winky winze wirer wirra wirri wisha wisht wists wited wites wived wiver wizen wizes wizzo woads woady woald wocks wodgy woful wojus woker wokka womas womby wongi wonts woold woons woopy woose worky wowse woxen wrast wrate wrawl wrick wried wrier wries wroke wroot wryer wuddy wudus wuffs wulls wunga wuses wyled wynds wyted wytes wythe xenic xerus xoana xolos xviii xylic xylol xylyl xysti xysts yaars yaass yabas yacca yacka yacks yadda yaffs yages yagis yagna yaird yajna yakow yampa yampy yamun yandy yapok yapon yapps yarak yarco yarer yarfa yarks yarra yarrs yarta yarto yatra yauds yauld yaups yawey yawny yawps yayas ybore yclad ycled ycond ydrad ydred yeads yealm yeans yecch yechs yechy yedes yeeds yeeek yeesh yeggs yelks yelms yelts yerds yerks yesks yests yesty yetts yeuch yeuks yeuky yeven yeves yewen yexed yexes yfere yiked yills yince yirds yirks yirrs yirth yites yitie ylems ylide ylids ylike ylkes ymolt ympes yobby yocks yodhs yodle yogee yoghs yohah yohay yoick yojan yokan yokeg yokul yolps yomim yomps yonic yonny yoofs yoops yopos yoppo yores yorga yorps youks yourt yowed yowes yowsa yowza yoyos yrapt yrent yrivd yrneh ysame ytost yucas yucch yucko yufts yuked yukes yukky yules yumps yupon yurta yuzus zabra zaida zaide zaidy zamac zamak zamis zanze zarda zarfs zaris zatis zawns zaxes zayde zayin zeals zebec zebub zebus zedas zeera zeins zendo zerda zerks zests zexes zezes zhomo zhush zhuzh zibet ziffs zigan zikrs zilas zills zimbi zimbs zinco zincs zincy zinky zinos ziram zitis zitty zizel zizit zlote zoaea zobos zobus zocco zoeae zoeal zoeas zoism zoist zokor zolle zonae zonks zooea zoomy zoons zooty zoppa zoppo zoril zoris zorse zowee zupas zuppa zurfs zuzim zygal zymes zymic".split(" ");
+
+/* =======================================================================
+   SOLVER CORE  (filtering + Wordle pattern + entropy / frequency scoring)
+   These functions were unit-tested in Node before being embedded here.
+   ======================================================================= */
+
+// Wordle color pattern of `guess` against candidate `answer`.
+// Returns array of 0 (gray), 1 (yellow), 2 (green) using standard two passes.
+function patternFor(guess, answer){
+  const res=[0,0,0,0,0];
+  const a=answer.split('');
+  const used=[false,false,false,false,false];
+  for(let i=0;i<5;i++){ if(guess[i]===a[i]){ res[i]=2; used[i]=true; } }     // greens first
+  for(let i=0;i<5;i++){
+    if(res[i]===2) continue;
+    for(let j=0;j<5;j++){ if(!used[j] && a[j]===guess[i]){ res[i]=1; used[j]=true; break; } } // then yellows
+  }
+  return res;
+}
+
+// Does `word` satisfy every row of constraints in `rows`?
+// rows: 6 rows; each row = 5 of {letter:'' , state:0|1|2}.  state 0=gray,1=yellow,2=green.
+function wordSatisfies(word, rows){
+  for(const row of rows){
+    const filled=[];
+    for(let i=0;i<5;i++){ if(row[i].letter) filled.push({i, L:row[i].letter, s:row[i].state}); }
+    if(!filled.length) continue;
+
+    // position constraints
+    for(const t of filled){
+      if(t.s===2){ if(word[t.i]!==t.L) return false; }   // green: letter must be here
+      else { if(word[t.i]===t.L) return false; }         // yellow or gray: letter cannot be here
+    }
+
+    // per-letter count constraints (handles duplicates correctly)
+    const gy={}, gray={};
+    for(const t of filled){
+      if(t.s===2||t.s===1) gy[t.L]=(gy[t.L]||0)+1;       // green+yellow occurrences
+      else gray[t.L]=(gray[t.L]||0)+1;                   // gray occurrences
+    }
+    for(const L of new Set([...Object.keys(gy),...Object.keys(gray)])){
+      let cnt=0; for(let i=0;i<5;i++) if(word[i]===L) cnt++;
+      const minc=gy[L]||0;
+      if(cnt<minc) return false;                          // need at least `minc` copies
+      if((gray[L]||0)>0 && cnt!==minc) return false;      // a gray copy caps total at `minc` (0 => excluded)
+    }
+  }
+  return true;
+}
+
+function filterWords(rows, list){
+  return list.filter(w=>wordSatisfies(w,rows));
+}
+
+// Information entropy (bits) of guessing `guess` against the candidate `pool`.
+function entropyOf(guess, pool){
+  const counts=new Map();
+  for(const ans of pool){
+    const p=patternFor(guess,ans).join('');
+    counts.set(p,(counts.get(p)||0)+1);
+  }
+  const N=pool.length; let H=0;
+  for(const c of counts.values()){ const pr=c/N; H-=pr*Math.log2(pr); }
+  return H;
+}
+
+// Best guess WITHIN the pool (Hard mode): every guess must itself satisfy all
+// the clues so far. Pool is frequency-sorted (common first) so ties resolve to
+// the more common word. Entropy for small pools, letter-frequency coverage for
+// large pools (50+).
+function bestGuessHard(pool){
+  const N=pool.length;
+  if(N===0) return null;
+  if(N===1) return pool[0];
+
+  if(N>=50){
+    const presence=new Map();
+    for(const w of pool){
+      const seen=new Set();
+      for(const ch of w) if(!seen.has(ch)){ seen.add(ch); presence.set(ch,(presence.get(ch)||0)+1); }
+    }
+    let best=pool[0], bestS=-1;
+    for(const w of pool){
+      let s=0; const seen=new Set();
+      for(const ch of w) if(!seen.has(ch)){ seen.add(ch); s+=(presence.get(ch)||0); }
+      if(s>bestS){ bestS=s; best=w; }
+    }
+    return best;
+  }
+
+  let best=pool[0], bestH=-1;
+  for(const w of pool){
+    const h=entropyOf(w,pool);
+    if(h>bestH){ bestH=h; best=w; }
+  }
+  return best;
+}
+
+/* ---- fast integer-encoded entropy (used by Normal-mode probing) ---- */
+let CODES=null;                              // Uint8Array[5] for every dictionary word (lazy)
+function encodeWord(w){ const u=new Uint8Array(5); for(let i=0;i<5;i++) u[i]=w.charCodeAt(i)-97; return u; }
+function ensureCodes(){ if(!CODES) CODES=WORDS.map(encodeWord); }
+const _cnt=new Int8Array(26);
+const _dist=new Int32Array(243);
+const _LN2=Math.LN2;
+// entropy (bits) of guess-code `g` against pre-encoded `poolCodes`, no allocations
+function fastEntropy(g, poolCodes){
+  _dist.fill(0);
+  const N=poolCodes.length;
+  for(let ai=0;ai<N;ai++){
+    const a=poolCodes[ai];
+    let r0=0,r1=0,r2=0,r3=0,r4=0;
+    if(g[0]===a[0])r0=2;else _cnt[a[0]]++;
+    if(g[1]===a[1])r1=2;else _cnt[a[1]]++;
+    if(g[2]===a[2])r2=2;else _cnt[a[2]]++;
+    if(g[3]===a[3])r3=2;else _cnt[a[3]]++;
+    if(g[4]===a[4])r4=2;else _cnt[a[4]]++;
+    if(r0!==2 && _cnt[g[0]]>0){r0=1;_cnt[g[0]]--;}
+    if(r1!==2 && _cnt[g[1]]>0){r1=1;_cnt[g[1]]--;}
+    if(r2!==2 && _cnt[g[2]]>0){r2=1;_cnt[g[2]]--;}
+    if(r3!==2 && _cnt[g[3]]>0){r3=1;_cnt[g[3]]--;}
+    if(r4!==2 && _cnt[g[4]]>0){r4=1;_cnt[g[4]]--;}
+    _cnt[a[0]]=0;_cnt[a[1]]=0;_cnt[a[2]]=0;_cnt[a[3]]=0;_cnt[a[4]]=0;
+    _dist[r0*81+r1*27+r2*9+r3*3+r4]++;
+  }
+  let H=0; const invN=1/N;
+  for(let k=0;k<243;k++){ const c=_dist[k]; if(c){ const p=c*invN; H-=p*Math.log(p)/_LN2; } }
+  return H;
+}
+
+// Best guess in Normal mode: the guess may be ANY dictionary word (even one that
+// can't be the answer), chosen to split the remaining answers as evenly as
+// possible. With <=2 answers left we just guess one of them. Near-ties favor a
+// word that could actually be the answer, then the more common word.
+function bestGuessNormal(pool){
+  const N=pool.length;
+  if(N<=2) return bestGuessHard(pool);
+  if(N>4000) return bestGuessHard(pool);     // safety valve; never hit after a real guess
+  ensureCodes();
+  const poolCodes=pool.map(encodeWord);
+  const poolSet=new Set(pool);
+  const EPS=0.01;                            // treat near-equal entropy as a tie
+  let best=null, bestH=-1, bestInPool=false, bestRank=Infinity;
+  for(let gi=0;gi<WORDS.length;gi++){
+    const h=fastEntropy(CODES[gi], poolCodes);
+    if(h>bestH+EPS){
+      bestH=h; best=WORDS[gi]; bestInPool=poolSet.has(WORDS[gi]); bestRank=gi;
+    } else if(h>bestH-EPS){
+      const inPool=poolSet.has(WORDS[gi]);
+      if((inPool && !bestInPool) || (inPool===bestInPool && gi<bestRank)){
+        if(h>bestH) bestH=h;
+        best=WORDS[gi]; bestInPool=inPool; bestRank=gi;
+      }
+    }
+  }
+  return best;
+}
+
+/* ---- guaranteed-win search: only suggest a guess that still solves every
+   remaining answer within the guesses left (falls back to best effort) ---- */
+const SEARCH_K=[0,0,0,80,30,150,12];         // top-scoring guesses tried per node, by guesses left
+const _pc=new Int8Array(26);
+// pattern of guess-code `g` vs answer-code `a` as 0..242 (242 = all green)
+function patCode(g,a){
+  let r0=0,r1=0,r2=0,r3=0,r4=0;
+  if(g[0]===a[0])r0=2;else _pc[a[0]]++;
+  if(g[1]===a[1])r1=2;else _pc[a[1]]++;
+  if(g[2]===a[2])r2=2;else _pc[a[2]]++;
+  if(g[3]===a[3])r3=2;else _pc[a[3]]++;
+  if(g[4]===a[4])r4=2;else _pc[a[4]]++;
+  if(r0!==2 && _pc[g[0]]>0){r0=1;_pc[g[0]]--;}
+  if(r1!==2 && _pc[g[1]]>0){r1=1;_pc[g[1]]--;}
+  if(r2!==2 && _pc[g[2]]>0){r2=1;_pc[g[2]]--;}
+  if(r3!==2 && _pc[g[3]]>0){r3=1;_pc[g[3]]--;}
+  if(r4!==2 && _pc[g[4]]>0){r4=1;_pc[g[4]]--;}
+  _pc[a[0]]=0;_pc[a[1]]=0;_pc[a[2]]=0;_pc[a[3]]=0;_pc[a[4]]=0;
+  return r0*81+r1*27+r2*9+r3*3+r4;
+}
+
+// Real Wordle hard mode: greens stay put and revealed letters must be reused
+// (gray letters may be guessed again). State = fixed greens + min count per letter.
+function hardState(rows){
+  const g=new Int8Array(5).fill(-1), m=new Int8Array(26);
+  for(const row of rows){
+    const c=new Int8Array(26);
+    for(let i=0;i<5;i++){
+      if(!row[i].letter) continue;
+      const k=row[i].letter.charCodeAt(0)-97;
+      if(row[i].state===2) g[i]=k;
+      if(row[i].state) c[k]++;
+    }
+    for(let k=0;k<26;k++) if(c[k]>m[k]) m[k]=c[k];
+  }
+  return {g,m};
+}
+function hardNext(st,gc,code){
+  const g=st.g.slice(), m=st.m.slice(), c=new Int8Array(26);
+  for(let i=4;i>=0;i--){ const s=code%3; code=(code-s)/3; if(s===2) g[i]=gc[i]; if(s) c[gc[i]]++; }
+  for(let k=0;k<26;k++) if(c[k]>m[k]) m[k]=c[k];
+  return {g,m};
+}
+const stKey=st=>st.g.join(',')+'|'+st.m.join('');
+const _legal=new Map();
+function legalGuesses(st){                   // WORDS indices allowed under hard-mode state
+  const key=stKey(st);
+  let L=_legal.get(key); if(L) return L;
+  L=[]; const c=new Int8Array(26);
+  outer: for(let gi=0;gi<CODES.length;gi++){
+    const w=CODES[gi];
+    for(let i=0;i<5;i++) if(st.g[i]>=0 && w[i]!==st.g[i]) continue outer;
+    c.fill(0); for(let i=0;i<5;i++) c[w[i]]++;
+    for(let k=0;k<26;k++) if(c[k]<st.m[k]) continue outer;
+    L.push(gi);
+  }
+  _legal.set(key,L); return L;
+}
+
+// candidate guesses for `pool` (WORDS indices), best first: [score, gi, entropy, worst group]
+function rankGuesses(pool,st){
+  const all=st?legalGuesses(st):null, n=all?all.length:CODES.length;
+  const poolCodes=pool.map(i=>CODES[i]), inPool=new Set(pool), out=[];
+  for(let j=0;j<n;j++){
+    const gi=all?all[j]:j, h=fastEntropy(CODES[gi],poolCodes);
+    let mx=0; for(let k=0;k<243;k++) if(_dist[k]>mx) mx=_dist[k];
+    out.push([h+(inPool.has(gi)?0.01:0), gi, h, mx]); // small nudge toward possible answers
+  }
+  out.sort((x,y)=>y[0]-x[0]||x[1]-y[1]);           // then the more common word
+  return out;
+}
+// top k by entropy interleaved with top k by smallest worst-case group
+function shortlist(ranked,k){
+  const byWorst=ranked.slice().sort((x,y)=>x[3]-y[3]||y[0]-x[0]);
+  const out=[], seen=new Set();
+  for(let i=0;i<k && i<ranked.length;i++)
+    for(const e of [ranked[i],byWorst[i]]) if(!seen.has(e[1])){ seen.add(e[1]); out.push(e); }
+  return out;
+}
+
+const _memo=new Map();
+// Time cap so one click never hangs the page. Once it runs out, unproven groups
+// count as unsolvable and the best-effort pick is used.
+const SEARCH_MS=2000, FALLBACK_MS=1000;
+let _deadline=Infinity;
+// can every answer in `pool` be found within `left` guesses?
+function solvable(pool,left,st){
+  if(pool.length===0) return true;
+  if(left<=0) return false;
+  if(pool.length===1) return true;
+  if(left===1) return false;
+  if(pool.length===2) return true;
+  const key=left+'|'+(st?stKey(st):'')+'|'+pool.join(',');
+  const hit=_memo.get(key); if(hit!==undefined) return hit;
+  if(Date.now()>_deadline) return false;
+  const res=firstWinning(pool,left,st)>=0;
+  if(res || Date.now()<=_deadline) _memo.set(key,res); // a "no" found after time ran out isn't proof
+  return res;
+}
+// does guessing `gi` leave every pattern group solvable with one guess fewer?
+function worksWith(gi,pool,left,st){
+  const groups=[...buckets(gi,pool)].filter(([k])=>k!==242).sort((x,y)=>y[1].length-x[1].length);
+  for(const [k,sub] of groups) if(!solvable(sub,left-1,st?hardNext(st,CODES[gi],k):null)) return false;
+  return true;
+}
+function buckets(gi,pool){
+  const g=CODES[gi], b=new Map();
+  for(const ai of pool){ const k=patCode(g,CODES[ai]); const a=b.get(k); if(a) a.push(ai); else b.set(k,[ai]); }
+  return b;
+}
+// first ranked guess that guarantees a win, or -1. With 2 guesses left only a
+// guess that splits the pool into singletons works, so every such guess is checked.
+function firstWinning(pool,left,st){
+  const ranked=rankGuesses(pool,st);
+  const need=Math.log2(pool.length)-1e-9;
+  const list=left===2 ? ranked : shortlist(ranked, SEARCH_K[left]);
+  for(const e of list){
+    if(left===2 && e[2]<need) continue;
+    if(worksWith(e[1],pool,left,st)) return e[1];
+  }
+  return -1;
+}
+
+// Second guess after the opener, per color pattern (0-242), found offline with no
+// time limit (scratchpad book.js). Rebuild it if the opener or word list changes.
+const BOOK2={"opener":"salet","normal":{"0":"corni","1":"tirth","2":"groin","3":"reine","4":"rhino","5":"preif","6":"nidor","7":"turon","8":"cribo","9":"coign","10":"roily","11":"clung","12":"boule","13":"toity","14":"elfin","15":"nidor","16":"litho","17":"fleet","18":"mooli","19":"ticky","20":"pilot","21":"dobie","22":"foyle","23":"found","24":"odium","25":"tiler","26":"cigar","27":"corni","28":"noria","29":"graip","30":"dearn","31":"reata","32":"recap","33":"acrid","34":"price","35":"arret","36":"miraa","37":"potai","38":"aborn","39":"meane","40":"ample","41":"reply","42":"pride","43":"alter","45":"rupia","46":"tolan","47":"allot","48":"rugby","49":"delta","50":"eclat","51":"drive","53":"aglet","54":"morin","55":"tinto","56":"runch","57":"grind","58":"tirth","59":"earnt","60":"rownd","61":"tromp","62":"craft","63":"lyric","64":"latah","65":"fight","66":"corby","67":"think","69":"cyder","70":"under","71":"lacet","72":"phyma","73":"tokay","74":"galut","75":"dutch","78":"graph","79":"taler","80":"valet","81":"proin","82":"tutor","83":"boric","84":"perne","85":"rente","86":"redig","87":"nidor","88":"nitro","89":"round","90":"logic","91":"fouls","92":"blist","93":"neifs","94":"lefts","95":"blest","96":"louis","97":"until","99":"mould","100":"chott","102":"dimps","103":"would","105":"impro","106":"union","107":"islet","108":"crias","109":"trois","110":"bravo","111":"dears","112":"teams","113":"brief","114":"drips","115":"aster","116":"asset","117":"flimp","118":"flats","119":"place","120":"perls","121":"tesla","122":"least","123":"claes","126":"hokum","127":"atlas","129":"melas","132":"bring","135":"mirkn","136":"ritts","137":"think","138":"purin","139":"twice","140":"earst","141":"mirkn","142":"trump","144":"birls","145":"lasts","147":"lapse","148":"taels","150":"never","153":"bimah","154":"human","156":"fight","159":"where","160":"tales","162":"noups","163":"porus","164":"rohun","165":"reine","166":"pinto","167":"stept","168":"nidor","169":"pirks","170":"sweet","171":"plouk","172":"youth","173":"spilt","174":"whelp","175":"eyrie","176":"slept","177":"repel","178":"steel","179":"sleet","180":"mikos","181":"silty","182":"split","183":"level","186":"irons","189":"churn","190":"pirns","191":"porch","192":"perne","193":"drake","194":"sweat","195":"years","198":"chill","199":"calls","200":"shalt","201":"heald","202":"steal","204":"slaes","207":"irony","209":"splat","210":"sella","216":"ornis","217":"honey","218":"saint","219":"first","220":"saute","222":"fyrds","223":"times","225":"would","227":"sault","228":"sable","231":"samel","234":"podia","235":"years","236":"salat","237":"salle","240":"sales"},"hard":{"0":"rhino","1":"turbo","2":"front","3":"bride","4":"ronte","5":"freit","6":"doner","7":"noter","8":"beret","9":"could","10":"hotly","11":"clint","12":"boule","13":"elite","14":"elint","15":"bedel","16":"hotel","17":"fleet","18":"milch","19":"tilly","20":"pilot","21":"dolie","22":"telic","23":"delft","24":"oiled","25":"tiler","26":"gilet","27":"noria","28":"train","29":"trait","30":"reman","31":"tegua","32":"repat","33":"armed","34":"apter","35":"arret","36":"liana","37":"rotal","38":"bloat","39":"clame","40":"plate","41":"leapt","42":"ariel","43":"alter","45":"pilau","46":"tolan","47":"allot","48":"belar","49":"delta","50":"eclat","51":"abled","53":"aglet","54":"naira","55":"tania","56":"pahit","57":"carne","58":"tarte","59":"earnt","60":"caper","61":"taped","62":"caret","63":"laura","64":"latah","65":"fault","66":"early","67":"latte","69":"gavel","70":"later","71":"lacet","72":"palay","73":"talak","74":"galut","75":"value","78":"paler","79":"taler","80":"valet","81":"morns","82":"tsubo","83":"worst","84":"berms","85":"treks","86":"drest","87":"doser","88":"tires","89":"roset","90":"lipos","91":"lotus","92":"blist","93":"lenis","94":"lefts","95":"blest","96":"loser","97":"lites","99":"films","100":"tolls","102":"helps","103":"belts","105":"doles","106":"tiles","107":"islet","108":"mrads","109":"goats","110":"coast","111":"deans","112":"teams","113":"beast","114":"asper","115":"aster","116":"asset","117":"plasm","118":"flats","119":"blast","120":"peals","121":"tesla","122":"least","123":"claes","126":"kolas","127":"atlas","129":"melas","132":"axles","135":"mains","136":"tarps","137":"saint","138":"maser","139":"tawse","140":"earst","141":"caser","142":"tapes","144":"palms","145":"lasts","147":"lapse","148":"taels","150":"laser","153":"malas","154":"talks","156":"false","159":"wales","160":"tales","162":"spins","163":"stoup","164":"shunt","165":"seine","166":"spite","167":"stept","168":"soree","169":"strep","170":"sweet","171":"soils","172":"still","173":"spilt","174":"speld","175":"steil","176":"slept","177":"sleep","178":"steel","179":"sleet","180":"silos","181":"silty","182":"split","183":"solve","186":"soles","189":"scarp","190":"stars","191":"scatt","192":"sepad","193":"skate","194":"sweat","195":"sades","198":"shaly","199":"stall","200":"shalt","201":"spale","202":"steal","204":"slaes","207":"sylva","209":"splat","210":"sella","216":"sansa","217":"sants","218":"saint","219":"sacre","220":"saute","222":"savey","223":"sated","225":"sails","227":"sault","228":"sable","231":"samel","234":"salpa","235":"salty","236":"salat","237":"salle","240":"sales"}};
+let IDX=null;                                // word -> WORDS index (lazy)
+function pickGuess(pool,rows,hard){
+  let left=6; for(const row of rows) if(row.some(t=>t.letter)) left--;
+  if(pool.length<=2 || left<=1) return pool[0];        // last guess must be a possible answer
+  ensureCodes();
+  if(!IDX) IDX=new Map(WORDS.map((w,i)=>[w,i]));
+  if(left===5 && rows[0].map(t=>t.letter).join('')===BOOK2.opener){   // precomputed 2nd guess
+    const w=BOOK2[hard?'hard':'normal'][rows[0].reduce((c,t)=>c*3+t.state,0)];
+    if(w) return w;
+  }
+  const idx=pool.map(w=>IDX.get(w)), st=hard?hardState(rows):null;
+  _deadline=Date.now()+SEARCH_MS;
+  let gi=firstWinning(idx, left, st);
+  if(gi<0){ _deadline=Date.now()+FALLBACK_MS; gi=mostCovered(idx, left, st); }
+  _deadline=Infinity;
+  return WORDS[gi];
+}
+// no sure win: pick the guess that wins for the most answers
+function mostCovered(pool,left,st){
+  const ranked=rankGuesses(pool,st);
+  let best=ranked[0][1], bestC=-1;
+  for(const [,gi] of shortlist(ranked, SEARCH_K[left])){
+    const c=coverWith(gi,pool,left,st);
+    if(c>bestC){ bestC=c; best=gi; }
+  }
+  return best;
+}
+function coverWith(gi,pool,left,st){
+  let c=0;
+  for(const [k,sub] of buckets(gi,pool))
+    c+= k===242 ? 1 : countSolved(sub,left-1,st?hardNext(st,CODES[gi],k):null);
+  return c;
+}
+const _cmemo=new Map(), COUNT_K=8;            // guesses tried per node when counting
+// how many answers in `pool` can be won within `left` guesses (a lower bound)
+function countSolved(pool,left,st){
+  if(left<=0) return 0;
+  if(pool.length<=left) return pool.length;   // guess them one by one
+  if(left===1) return 1;
+  if(solvable(pool,left,st)) return pool.length;
+  if(Date.now()>_deadline) return left;
+  const key=left+'|'+(st?stKey(st):'')+'|'+pool.join(',');
+  const hit=_cmemo.get(key); if(hit!==undefined) return hit;
+  let best=left;
+  for(const [,gi] of shortlist(rankGuesses(pool,st), COUNT_K)){
+    const c=coverWith(gi,pool,left,st);
+    if(c>best) best=c;
+  }
+  if(Date.now()<=_deadline) _cmemo.set(key,best);
+  return best;
+}
+
+// The list is common words first, then rare words A-Z. Real answers are almost always
+// common, so plan around the common words that fit and only fall back to rare ones
+// when no common word is left. This is what keeps it from suggesting words like DEARE.
+let COMMON=null;
+function likelyWords(rows){
+  const all=filterWords(rows,WORDS);
+  if(!COMMON){
+    let b=WORDS.length-1; while(b>0 && WORDS[b-1]<WORDS[b]) b--;   // start of the A-Z rare section
+    COMMON=new Set(WORDS.slice(0,b));
+  }
+  const common=all.filter(w=>COMMON.has(w));
+  return {pool: common.length ? common : all, all};
+}
+
+let hardMode=false;
+function bestGuess(pool,rows){ return pickGuess(pool,rows,hardMode); }
+
+/* =======================================================================
+   GRID STATE + DOM
+   ======================================================================= */
+const ROWS=6, COLS=5;
+const grid = Array.from({length:ROWS},()=>Array.from({length:COLS},()=>({letter:'',state:0})));
+let active = {r:0,c:0};
+const tileEls = []; // 2D refs
+
+const board = document.getElementById('board');
+
+function buildBoard(){
+  for(let r=0;r<ROWS;r++){
+    const rowEl=document.createElement('div'); rowEl.className='row';
+
+    const num=document.createElement('div'); num.className='rownum'; num.textContent=r+1;
+    rowEl.appendChild(num);
+
+    const tiles=document.createElement('div'); tiles.className='tiles';
+    tileEls[r]=[];
+    for(let c=0;c<COLS;c++){
+      const t=document.createElement('div');
+      t.className='tile'; t.setAttribute('role','button'); t.tabIndex=-1;
+      t.addEventListener('click',()=>onTileClick(r,c));
+      tiles.appendChild(t);
+      tileEls[r][c]=t;
+    }
+    rowEl.appendChild(tiles);
+
+    const clr=document.createElement('button');
+    clr.className='clrrow'; clr.title='Clear this row'; clr.innerHTML='&times;';
+    clr.addEventListener('click',(e)=>{ e.stopPropagation(); clearRow(r); });
+    rowEl.appendChild(clr);
+
+    board.appendChild(rowEl);
+  }
+}
+
+function render(){
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const cell=grid[r][c]; const el=tileEls[r][c];
+      let cls='tile';
+      if(cell.letter){
+        if(cell.state===1) cls+=' yellow';
+        else if(cell.state===2) cls+=' green';
+        else cls+=' filled';
+      }
+      if(active.r===r && active.c===c) cls+=' active';
+      el.className=cls;
+      el.textContent=cell.letter;
+      el.setAttribute('aria-label', cell.letter
+        ? `Row ${r+1}, letter ${c+1}: ${cell.letter.toUpperCase()}, ${['gray','yellow','green'][cell.state]}. Tap to change color.`
+        : `Row ${r+1}, letter ${c+1}: empty`);
+    }
+  }
+  renderKeys();
+}
+
+/* ---- on-screen keyboard (phones have no physical keys) ---- */
+const KB_ROWS=['qwertyuiop','asdfghjkl','+zxcvbnm-'];
+const keyEls={};
+function buildKeyboard(){
+  const kb=document.getElementById('kb');
+  KB_ROWS.forEach((row,ri)=>{
+    const rowEl=document.createElement('div'); rowEl.className='kb-row';
+    if(ri===1){ const sp=document.createElement('div'); sp.className='kb-spacer'; rowEl.appendChild(sp); }
+    for(const ch of row){
+      const b=document.createElement('button'); b.type='button'; b.className='key';
+      if(ch==='+'){ b.classList.add('wide'); b.textContent='Next'; b.setAttribute('aria-label','Next row'); b.onclick=nextRow; }
+      else if(ch==='-'){
+        b.classList.add('wide'); b.setAttribute('aria-label','Backspace'); b.onclick=backspace;
+        b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-6 6M11 9l6 6"/></svg>';
+      } else { b.textContent=ch; b.onclick=()=>typeLetter(ch); keyEls[ch]=b; }
+      rowEl.appendChild(b);
+    }
+    if(ri===1){ const sp=document.createElement('div'); sp.className='kb-spacer'; rowEl.appendChild(sp); }
+    kb.appendChild(rowEl);
+  });
+}
+// color each key by the best state it has on the board, like the real game
+function renderKeys(){
+  const best={};
+  for(let r=0;r<ROWS;r++){
+    if(!rowFull(r)) continue;
+    for(let c=0;c<COLS;c++){ const {letter:L,state:s}=grid[r][c]; if(best[L]===undefined||s>best[L]) best[L]=s; }
+  }
+  for(const ch in keyEls){
+    const s=best[ch];
+    keyEls[ch].className='key'+(s===undefined?'':[' k-gray',' k-yellow',' k-green'][s]);
+  }
+}
+
+/* ---- interactions ---- */
+function setActive(r,c){ active={r,c}; render(); }
+
+function onTileClick(r,c){
+  // clicking a lettered tile cycles its color only; it does NOT move the
+  // typing cursor (the cursor is driven by typing / arrows / tab / enter).
+  if(grid[r][c].letter){
+    grid[r][c].state = (grid[r][c].state + 1) % 3; // gray -> yellow -> green -> gray
+    render();
+  }
+}
+
+function typeLetter(ch){
+  if(rowFull(active.r)) return;                    // completed words are locked
+  grid[active.r][active.c].letter = ch;            // gray by default (state unchanged, starts at 0)
+  if(active.c < COLS-1){
+    active.c++;                                    // auto-advance within the row
+  } else if(active.r < ROWS-1){
+    active.r++; active.c=0;                         // jump to the next row after the 5th letter
+  }
+  render();
+}
+
+// move the cursor to the start of the next row (Tab / Enter)
+function nextRow(){
+  if(active.r < ROWS-1){ active.r++; }
+  active.c=0;
+  render();
+}
+
+function backspace(){
+  if(rowFull(active.r)) return;                    // can't edit a completed word — use the × to redo
+  const cell=grid[active.r][active.c];
+  if(cell.letter){
+    cell.letter=''; cell.state=0;
+  } else if(active.c>0){
+    active.c--;
+    grid[active.r][active.c].letter='';
+    grid[active.r][active.c].state=0;
+  }
+  // at the first column with nothing to delete: stay put (never jump back into a finished row)
+  render();
+}
+
+function move(dr,dc){
+  active.r=Math.min(ROWS-1,Math.max(0,active.r+dr));
+  active.c=Math.min(COLS-1,Math.max(0,active.c+dc));
+  render();
+}
+
+function clearRow(r){
+  for(let c=0;c<COLS;c++){ grid[r][c].letter=''; grid[r][c].state=0; }
+  active={r,c:0};
+  render();
+}
+
+function clearAll(){
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ grid[r][c].letter=''; grid[r][c].state=0; }
+  active={r:0,c:0};
+  render();
+  showStarter();
+}
+
+// index of the first fully-empty row, or -1 if the board is full
+function firstEmptyRow(){
+  for(let r=0;r<ROWS;r++){
+    let empty=true;
+    for(let c=0;c<COLS;c++){ if(grid[r][c].letter){ empty=false; break; } }
+    if(empty) return r;
+  }
+  return -1;
+}
+function boardEmpty(){
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(grid[r][c].letter) return false;
+  return true;
+}
+// a row with all five letters filled is "locked" — its letters can't be edited
+function rowFull(r){
+  for(let c=0;c<COLS;c++) if(!grid[r][c].letter) return false;
+  return true;
+}
+
+// drop a word into the next empty row below the previous guesses. Any position
+// already confirmed green carries over as green if the new word shares that
+// letter there, so you don't have to re-mark known letters.
+function useGuess(word){
+  const r=firstEmptyRow();
+  if(r<0) return;                                   // all six rows used
+
+  // collect confirmed green letters by position from every earlier row
+  const greens=[null,null,null,null,null];
+  for(let rr=0;rr<r;rr++){
+    for(let c=0;c<COLS;c++){
+      if(grid[rr][c].state===2 && grid[rr][c].letter) greens[c]=grid[rr][c].letter;
+    }
+  }
+
+  for(let c=0;c<COLS;c++){
+    grid[r][c].letter=word[c];
+    grid[r][c].state=(greens[c]===word[c]) ? 2 : 0;  // carry over greens, else gray
+  }
+  active={r:Math.min(r+1,ROWS-1), c:0};             // highlight the next line below the word
+  render();
+  document.getElementById('board').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+document.addEventListener('keydown',(e)=>{
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  const k=e.key;
+  if(/^[a-zA-Z]$/.test(k)){ e.preventDefault(); typeLetter(k.toLowerCase()); }
+  else if(k==='Backspace'){ e.preventDefault(); backspace(); }
+  else if(k==='ArrowLeft'){ e.preventDefault(); move(0,-1); }
+  else if(k==='ArrowRight'){ e.preventDefault(); move(0,1); }
+  else if(k==='ArrowUp'){ e.preventDefault(); move(-1,0); }
+  else if(k==='ArrowDown'){ e.preventDefault(); move(1,0); }
+  else if(k==='Tab'){ e.preventDefault(); nextRow(); }
+  else if(k==='Enter'){ e.preventDefault(); nextRow(); }
+});
+
+/* =======================================================================
+   CALCULATE + RESULT RENDERING
+   ======================================================================= */
+const esc = s => s.replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+const up  = s => s.toUpperCase();
+
+function answerTiles(word, variant){
+  const cls = variant ? ' '+variant : '';
+  return `<div class="answer-tiles${cls}" role="button" title="Click to drop ${up(word)} into the grid" onclick="useGuess('${word}')">`+
+    word.split('').map(ch=>`<span class="atile">${ch}</span>`).join('')+
+    `</div>`+
+    `<div class="use-wrap"><button type="button" class="use-btn" onclick="useGuess('${word}')">Use this guess<span class="ar">&#8595;</span></button></div>`;
+}
+
+function chipList(words, cap){
+  cap = cap || 80;
+  const shown = words.slice(0,cap);
+  let html = `<div class="chips">`+ shown.map(w=>`<span class="chip">${up(w)}</span>`).join('');
+  if(words.length>cap) html += `<span class="chip more">+${words.length-cap} more</span>`;
+  html += `</div>`;
+  return html;
+}
+
+function calculate(){
+  const result=document.getElementById('result');
+  if(boardEmpty()){ showStarter(); return; }
+  const {pool, all} = likelyWords(grid);
+  const n = pool.length, rare = all.length - n;
+
+  if(n===0){
+    result.innerHTML = `<div class="card err">
+      <div class="verdict"><div class="ttl">No matching words</div>
+      Nothing fits these clues. Double-check your tile colors. A letter marked gray that should be yellow or green is the usual culprit.</div>
+    </div>`;
+    return;
+  }
+
+  const best = bestGuess(pool, grid);
+  const others = pool.filter(w=>w!==best);
+
+  let html = `<div class="card">`;
+
+  if(n===1){
+    html += `<div class="verdict"><span class="word">${up(best)}</span> is the answer!</div>`;
+    html += answerTiles(best,'');
+  } else if(n===2){
+    html += `<div class="verdict">Two words left, <span class="word">${up(best)}</span> is a 50/50 shot.</div>`;
+    html += answerTiles(best,'fifty');
+    html += `<div class="others"><h3>The other possibility</h3>${chipList(others)}</div>`;
+  } else if(!pool.includes(best)){
+    // Normal mode: a filler/probe word that isn't itself a possible answer
+    html += `<div class="verdict">Guess <span class="word">${up(best)}</span> to narrow it down fastest.</div>`;
+    html += answerTiles(best,'probe');
+    html += `<div class="probe-note">Filler guess: not a possible answer itself, but it tests the most letters at once to split what's left.</div>`;
+    html += `<div class="others"><h3>Possible answers</h3>${chipList(pool)}</div>`;
+  } else {
+    html += `<div class="verdict">Guess <span class="word">${up(best)}</span> to eliminate the most options.</div>`;
+    html += answerTiles(best,'');
+    html += `<div class="others"><h3>Other candidates</h3>${chipList(others)}</div>`;
+  }
+
+  html += `<div class="count"><b>${n.toLocaleString()}</b> likely ${n===1?'answer':'answers'}`+
+    (rare ? ` <span title="Rare words Wordle accepts but almost never uses as the answer">(+${rare.toLocaleString()} rare)</span>` : '')+`</div>`;
+  html += `</div>`;
+  result.innerHTML = html;
+  result.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+/* best opening guess (highest expected information over the word list) */
+const STARTER = "salet";
+function showStarter(){
+  document.getElementById('result').innerHTML =
+    `<div class="card starter">`+
+      `<div class="verdict">Best opening guess: <span class="word">${up(STARTER)}</span></div>`+
+      answerTiles(STARTER,'')+
+      `<div class="count">A strong start for any puzzle. Tap to drop it in.</div>`+
+    `</div>`;
+}
+
+const calcBtn=document.getElementById('calc');
+// the look-ahead search can take a second or two, so show it's working first
+function runCalculate(){
+  if(calcBtn.disabled) return;
+  calcBtn.disabled=true; calcBtn.innerHTML='<span class="spin" aria-hidden="true"></span>Thinking…';
+  setTimeout(()=>{                     // give the browser a moment to paint the spinner
+    try{ calculate(); }
+    finally{ calcBtn.disabled=false; calcBtn.textContent='Calculate Best Guess'; }
+  },30);
+}
+calcBtn.addEventListener('click', runCalculate);
+document.getElementById('clearAll').addEventListener('click', clearAll);
+
+/* ---- Normal / Hard mode toggle ---- */
+const modeSwitch = document.getElementById('modeSwitch');
+function updateModeUI(){
+  modeSwitch.classList.toggle('on', hardMode);
+  modeSwitch.setAttribute('aria-checked', hardMode ? 'true' : 'false');
+  document.getElementById('lblNormal').classList.toggle('active', !hardMode);
+  document.getElementById('lblHard').classList.toggle('active', hardMode);
+  document.getElementById('modeHelp').textContent = hardMode
+    ? 'Hard mode: every guess must keep greens in place and reuse all yellows.'
+    : 'Normal mode: may suggest a filler word (not always a possible answer) that splits the options fastest.';
+}
+try{ hardMode = localStorage.getItem('wordleHard')==='1'; }catch(e){}
+modeSwitch.addEventListener('click', ()=>{
+  hardMode = !hardMode;
+  try{ localStorage.setItem('wordleHard', hardMode?'1':'0'); }catch(e){}
+  updateModeUI();
+  if(!boardEmpty()) runCalculate();           // refresh the suggestion for the new mode
+});
+
+/* init */
+buildBoard();
+buildKeyboard();
+render();
+updateModeUI();
+showStarter();
+</script>
+</body>
+</html>
